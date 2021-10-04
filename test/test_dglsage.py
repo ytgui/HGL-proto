@@ -1,5 +1,4 @@
 import time
-from dgl import data
 import torch
 from torch import nn
 import dgl
@@ -37,6 +36,13 @@ class DGLSage(nn.Module):
 
 
 def check_sage_training(dataset):
+    #
+    device = 'cpu'
+    if torch.cuda.is_available():
+        device = 'cuda'
+    print('device: {}'.format(device))
+
+    #
     graph = dataset[0]
     features = graph.ndata['feat']
     labels = graph.ndata['label']
@@ -46,16 +52,20 @@ def check_sage_training(dataset):
     val_nodes = torch.nonzero(val_mask).squeeze()
     test_nodes = torch.nonzero(test_mask).squeeze()
     train_nodes = torch.nonzero(train_mask).squeeze()
+    print('dataset split: {}-{}-{}'.format(
+        len(train_nodes), len(val_nodes), len(test_nodes)))
 
     #
+    batch_size = 16
+    sampler_neighboors = 16
+    n_features = features.size(1)
     n_labels = dataset.num_classes
-    _, n_features = features.size()
     model = DGLSage(
         in_features=n_features,
         hidden_features=32,
         out_features=n_labels,
         dropout=0.1
-    )
+    ).to(device)
     loss_fn = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(),
                                  lr=1e-2,
@@ -64,8 +74,8 @@ def check_sage_training(dataset):
     #
     def train(src, dst, blocks):
         model.train()
-        logits = model(blocks, features[src])
-        loss = loss_fn(logits, labels[dst])
+        logits = model(blocks, features[src].to(device))
+        loss = loss_fn(logits, labels[dst].to(device))
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
@@ -73,55 +83,60 @@ def check_sage_training(dataset):
 
     def evaluate(eval_nodes):
         model.eval()
+        accuracy = []
+        sampler = dgl_loader.MultiLayerNeighborSampler(
+            [sampler_neighboors] * 2
+        )
         dataloader = dgl_loader.NodeDataLoader(
             graph,
             eval_nodes,
-            dgl_loader.MultiLayerFullNeighborSampler(2),
-            batch_size=len(eval_nodes),
+            sampler,
+            device=device,
+            batch_size=batch_size,
             shuffle=True,
             drop_last=False,
             num_workers=0
         )
-        dataiter = iter(dataloader)
-        src, dst, blocks = next(dataiter)
-        with torch.no_grad():
-            logits = model(blocks, features[src])
-            predict = torch.argmax(logits, dim=-1)
-            correct = torch.sum(predict == labels[dst])
-            return correct.item() / len(dst)
+        for i, (src, dst, blocks) in enumerate(dataloader):
+            if i == 100:
+                break
+            with torch.no_grad():
+                logits = model(blocks, features[src].to(device))
+                predict = torch.argmax(logits, dim=-1)
+                correct = torch.sum(predict == labels[dst].to(device))
+                accuracy.append(correct.item() / len(dst))
+        return sum(accuracy) / len(accuracy)
 
     #
     sampler = dgl_loader.MultiLayerNeighborSampler(
-        [4, 4]
+        [sampler_neighboors] * 2
     )
     dataloader = dgl_loader.NodeDataLoader(
         graph, train_nodes, sampler,
-        batch_size=64, shuffle=True,
-        drop_last=False, num_workers=0
+        device=device, batch_size=batch_size,
+        shuffle=True, drop_last=True, num_workers=0
     )
     best_accuracy = 0.0
     for epoch in range(20):
         for i, (src, dst, blocks) in enumerate(dataloader):
-            print('[{}-{}] blocks: {}-{}-{}'.format(
-                epoch, i,
-                blocks[0].num_src_nodes(),
-                blocks[0].num_dst_nodes(),
-                blocks[1].num_dst_nodes()))
             loss = train(src, dst, blocks)
-            val_accuracy = evaluate(val_nodes)
-            print('[{}-{}] loss: {:.3f}, val_accuracy: {:.3f}'.format(
-                epoch, i, loss, val_accuracy))
+            if i % 20 == 19:
+                val_accuracy = evaluate(val_nodes)
+                print('[{}-{}] loss: {:.3f}, val_accuracy: {:.3f}'.format(
+                    epoch, i, loss, val_accuracy))
         test_accuracy = evaluate(test_nodes)
         best_accuracy = max(best_accuracy, test_accuracy)
-        print('[{}] test_accuracy: {}, best_accuracy: {}'.format(
+        print('[{}] test_accuracy: {:.3f}, best_accuracy: {:.3f}'.format(
             epoch, test_accuracy, best_accuracy))
+        if torch.cuda.is_available():
+            print(torch.cuda.memory_summary())
         if test_accuracy >= 0.85:
             break
 
 
 def test():
     # dataset
-    dataset = dgl_data.CoraGraphDataset(
+    dataset = dgl_data.RedditDataset(
         verbose=False
     )
 
