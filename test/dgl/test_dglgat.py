@@ -14,8 +14,8 @@ class DGLSage(nn.Module):
                  out_features: int,
                  dropout: float):
         nn.Module.__init__(self)
-        self.layer1 = dgl_nn.SAGEConv(
-            in_features, hidden_features, 'mean'
+        self.layer1 = dgl_nn.GATConv(
+            in_features, hidden_features, num_heads=8
         )
         self.activation = nn.ReLU(
             inplace=True
@@ -23,15 +23,17 @@ class DGLSage(nn.Module):
         self.dropout = nn.Dropout(
             p=dropout
         )
-        self.layer2 = dgl_nn.SAGEConv(
-            hidden_features, out_features, 'mean'
+        self.layer2 = dgl_nn.GATConv(
+            hidden_features, out_features, num_heads=8
         )
 
     def forward(self, blocks, x):
         h = self.layer1(blocks[0], x)
+        h = torch.mean(h, dim=1)
         h = self.activation(h)
         h = self.dropout(h)
         h = self.layer2(blocks[1], h)
+        h = torch.mean(h, dim=1)
         return h
 
 
@@ -44,6 +46,7 @@ def check_sage_training(dataset):
 
     #
     graph = dataset[0]
+    graph.create_formats_()
     features = graph.ndata['feat']
     labels = graph.ndata['label']
     val_mask = graph.ndata['val_mask']
@@ -124,6 +127,8 @@ def check_sage_training(dataset):
                 val_accuracy = evaluate(val_nodes)
                 print('[{}-{}] loss: {:.3f}, val_accuracy: {:.3f}'.format(
                     epoch, i, loss, val_accuracy))
+                if val_accuracy >= 0.85:
+                    break
         test_accuracy = evaluate(test_nodes)
         best_accuracy = max(best_accuracy, test_accuracy)
         print('[{}] test_accuracy: {:.3f}, best_accuracy: {:.3f}'.format(
