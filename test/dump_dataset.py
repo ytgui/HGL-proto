@@ -72,7 +72,7 @@ def dump_bench_dataset(data):
     print('features: {}'.format(features.shape))
 
     # adjacency
-    adjacency = graph.adjacency_matrix(scipy_fmt='csr')
+    adjacency = graph.adjacency_matrix(scipy_fmt='csr', transpose=False)
     rev_adjacency = graph.adjacency_matrix(scipy_fmt='csr', transpose=True)
 
     # degree

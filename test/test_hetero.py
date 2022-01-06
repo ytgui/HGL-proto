@@ -1,5 +1,5 @@
 import torch
-from torch import fx, nn
+from torch import nn
 import dgl
 from dgl import nn as dglnn
 from typing import Dict
