@@ -35,6 +35,9 @@ setup(
             sources=[
                 'src/spmm.cpp',
                 'src/spmm_cuda.cu'
+            ],
+            include_dirs=[
+                'include'
             ]
         )
     ],
