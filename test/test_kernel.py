@@ -3,6 +3,8 @@ import random
 import sageir
 from torch import nn
 from tqdm import tqdm
+from dgl import nn as dglnn
+from dgl.data import CoraGraphDataset
 
 
 def to_dense(n_rows, n_cols, sparse):
@@ -104,9 +106,70 @@ def check_gspmm():
     )
 
 
+class GCNLayer(nn.Module):
+    def __init__(self,
+                 in_features: int,
+                 out_features: int):
+        nn.Module.__init__(self)
+        self.fc = nn.Linear(
+            in_features, out_features
+        )
+
+    def forward(self,
+                block: sageir.Block,
+                x: torch.Tensor):
+        x = self.fc(x)
+        x = sageir.gspmm(
+            block.adj_sparse,
+            block.rev_sparse,
+            x
+        )
+        return x
+
+
+def check_layer():
+    dataset = CoraGraphDataset(
+        verbose=False
+    )
+
+    #
+    graph = dataset[0].to('cuda')
+    block = sageir.from_dglgraph(graph)
+
+    #
+    n_inputs, d_hidden = 64, 16
+    feature = torch.randn([
+        graph.num_nodes(), n_inputs
+    ]).to('cuda')
+    layer1 = dglnn.GraphConv(
+        n_inputs, d_hidden, 'none'
+    ).to('cuda')
+    layer2 = GCNLayer(
+        n_inputs, d_hidden
+    ).to('cuda')
+
+    #
+    with torch.no_grad():
+        bias = layer1.bias
+        if bias is not None:
+            layer2.fc.bias.copy_(bias)
+        weight = layer1.weight.T
+        layer2.fc.weight.copy_(weight)
+
+    #
+    y1 = layer1(graph, feature)
+    y2 = layer2(block, feature)
+
+    #
+    assert torch.allclose(
+        y1, y2, atol=1e-3, rtol=1e-3
+    )
+
+
 def test():
     for _ in tqdm(range(256)):
         check_gspmm()
+        check_layer()
 
 
 if __name__ == "__main__":

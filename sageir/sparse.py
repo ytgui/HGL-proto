@@ -1,5 +1,5 @@
 import graph_ext
-from torch import autograd
+from torch import autograd, overrides
 
 
 class GSPMMFunction(autograd.Function):
@@ -32,4 +32,13 @@ class GSPMMFunction(autograd.Function):
         return None, None, grad_x
 
 
-gspmm = GSPMMFunction.apply
+def gspmm(adj_sparse, rev_sparse, x):
+    if overrides.has_torch_function_variadic(
+        adj_sparse, rev_sparse, x
+    ):
+        return overrides.handle_torch_function(
+            gspmm,
+            (adj_sparse, rev_sparse, x),
+            adj_sparse, rev_sparse, x
+        )
+    return GSPMMFunction.apply(adj_sparse, rev_sparse, x)
