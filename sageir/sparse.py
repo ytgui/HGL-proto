@@ -1,4 +1,5 @@
 import graph_ext
+from sageir import Block
 from torch import autograd, overrides
 
 
@@ -32,13 +33,17 @@ class GSPMMFunction(autograd.Function):
         return None, None, grad_x
 
 
-def gspmm(adj_sparse, rev_sparse, x):
+def gspmm(block: Block, x):
     if overrides.has_torch_function_variadic(
-        adj_sparse, rev_sparse, x
+        block, x
     ):
         return overrides.handle_torch_function(
             gspmm,
-            (adj_sparse, rev_sparse, x),
-            adj_sparse, rev_sparse, x
+            (block, x),
+            block, x
         )
-    return GSPMMFunction.apply(adj_sparse, rev_sparse, x)
+    return GSPMMFunction.apply(
+        block.adj_sparse,
+        block.rev_sparse,
+        x
+    )

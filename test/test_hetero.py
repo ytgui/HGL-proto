@@ -19,14 +19,10 @@ class GCNLayer(nn.Module):
 
     def forward(self,
                 block: sageir.Block,
-                x: torch.Tensor):
-        x = self.fc(x)
-        x = sageir.gspmm(
-            block.adj_sparse,
-            block.rev_sparse,
-            x
-        )
-        return x
+                feature: torch.Tensor):
+        h = self.fc(feature)
+        h = sageir.gspmm(block, h)
+        return h
 
 
 class GCNModel(nn.Module):
@@ -41,10 +37,38 @@ class GCNModel(nn.Module):
 
     def forward(self,
                 block: sageir.Block,
-                x: torch.Tensor):
-        x = self.i2h(block, x)
+                feature: torch.Tensor):
+        x = self.i2h(
+            block, feature
+        )
         x = self.h2o(block, x)
         return x
+
+
+class HeteroGraphConv(nn.Module):
+    def __init__(self, convs: dict):
+        nn.Module.__init__(self)
+        self._convs = nn.ModuleDict(convs)
+
+    def forward(self, hblock, features):
+        counts = {}
+        outputs = {}
+        for (sty, ety, dty), block \
+                in hblock:
+            res = self._convs[ety](
+                block, features[sty]
+            )
+            if dty not in outputs:
+                counts[dty] = 0
+                outputs[dty] = torch.zeros(
+                    size=res.size(),
+                    device=res.device
+                )
+            counts[dty] += 1
+            outputs[dty] = outputs[dty] + res
+        for dty, res in outputs.items():
+            outputs[dty] = res / counts[dty]
+        return outputs
 
 
 def check_homo():
@@ -77,9 +101,17 @@ def check_homo():
 
     #
     mod2ir = sageir.Module2IR()
-    dag = mod2ir.transform(
-        model, args=(block, feature)
+    dataflow = mod2ir.transform(
+        model, kwargs={
+            'block': block,
+            'feature': feature
+        }
     )
+    sageir.Printer().dump(dataflow)
+
+    #
+    executor = sageir.Executor()
+    # y = executor.run(dataflow)
     a = 0
 
 
@@ -87,21 +119,52 @@ def check_hetero():
     dataset = MUTAGDataset(
         verbose=True
     )
-    graph = dataset[0].to('cuda')
+    g = dataset[0].to('cuda')
+    hblock = sageir.from_dglgraph(g)
+    n_labels = dataset.num_classes
     pred_cat = dataset.predict_category
     print('predict_category:', pred_cat)
 
     #
-    features = {}
-    for nty in graph.ntypes:
-        a = 0
-    x = ir.OpTensor(size=[])
+    d_hidden = 16
+    model = HeteroGraphConv({
+        ety: GCNLayer(
+            in_features=d_hidden,
+            out_features=d_hidden
+        )
+        for ety in hblock.etypes
+    }).to('cuda')
+    label = g.ndata.pop(
+        'labels'
+    )[pred_cat].type(
+        torch.IntTensor
+    ).to('cuda')
+    features = {
+        nty: torch.randn(size=[
+            g.number_of_nodes(nty),
+            d_hidden
+        ]).to('cuda')
+        for nty in g.ntypes
+    }
+
+    #
+    mod2ir = sageir.Module2IR()
+    dataflow = mod2ir.transform(
+        model, kwargs={
+            'hblock': hblock,
+            'features': features
+        }
+    )
+    sageir.Printer().dump(dataflow)
+
+    #
+    a = 0
 
 
 def test():
     for _ in tqdm(range(256)):
-        check_homo()
-        # check_hetero()
+        # check_homo()
+        check_hetero()
 
 
 if __name__ == "__main__":

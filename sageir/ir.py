@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+from sageir import graph
 from typing import List, Union
 
 
@@ -15,11 +16,17 @@ class Op:
         self.val_params = {}
 
 
+class OpGraph(Op):
+    def __init__(self, g: graph.Block, name: str):
+        Op.__init__(self, {}, name)
+        assert g.size and len(g.size)
+        self.size = g.size
+
+
 class OpTensor(Op):
     def __init__(self, size: List[int], prevs: dict = {}, name: str = ''):
         Op.__init__(self, prevs, name)
-        assert isinstance(size, (list, tuple))
-        self.size = size
+        self.size = list(size)
         if not prevs:
             return
         assert isinstance(prevs, dict)
@@ -27,18 +34,44 @@ class OpTensor(Op):
             n.next = self
 
 
+"""
 class OpTuple(Op):
     def __init__(self, prevs: List[Op], name: str = ''):
-        Op.__init__(self, prevs, name)
         assert len(prevs) > 0
         prevs = {
             i: x
             for i, x in enumerate(prevs)
         }
+        Op.__init__(self, prevs, name)
         self.size = [len(prevs)]
-        assert isinstance(prevs, dict)
         for n in prevs.values():
             n.next = self
+"""
+
+class OpAdd(OpTensor):
+    def __init__(self,
+                 a: OpTensor,
+                 b: OpTensor,
+                 name: str = ''):
+        OpTensor.__init__(
+            self,
+            size=b.size,
+            prevs={'a': a, 'b': b},
+            name=name
+        )
+
+
+class OpMul(OpTensor):
+    def __init__(self,
+                 a: float,
+                 b: OpTensor,
+                 name: str = ''):
+        OpTensor.__init__(
+            self,
+            size=b.size,
+            prevs={'a': a, 'b': b},
+            name=name
+        )
 
 
 class OpLinear(OpTensor):
@@ -49,7 +82,7 @@ class OpLinear(OpTensor):
                  name: str = ''):
         OpTensor.__init__(
             self,
-            size=[-1, 1],
+            size=[x.size[0], w.size(0)],
             prevs={'x': x},
             name=name
         )
@@ -58,13 +91,13 @@ class OpLinear(OpTensor):
 
 class OpGSPMM(OpTensor):
     def __init__(self,
-                 a: OpTensor,
-                 r: OpTensor,
+                 b: OpGraph,
                  x: OpTensor,
                  name: str = ''):
+        assert len(x.size) == 2
         OpTensor.__init__(
             self,
-            size=[-1, 1],
-            prevs={'a': a, 'r': r, 'x': x},
+            size=[b.size[0], x.size[1]],
+            prevs={'b': b, 'x': x},
             name=name
         )
