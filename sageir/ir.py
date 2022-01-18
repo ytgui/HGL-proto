@@ -48,6 +48,7 @@ class OpTuple(Op):
             n.next = self
 """
 
+
 class OpAdd(OpTensor):
     def __init__(self,
                  a: OpTensor,
@@ -101,3 +102,26 @@ class OpGSPMM(OpTensor):
             prevs={'b': b, 'x': x},
             name=name
         )
+
+
+class OpLeakyRelu(OpTensor):
+    def __init__(self,
+                 x: OpTensor,
+                 name: str = ''):
+        assert len(x.size) == 1
+        OpTensor.__init__(
+            self,
+            size=x.size,
+            prevs={'x': x},
+            name=name
+        )
+
+
+class OpMessageFunc(OpTensor):
+    def __init__(self, size: list, prevs: dict, func_name: str):
+        OpTensor.__init__(
+            self,
+            size=size,
+            prevs=prevs
+        )
+        self.func_name = func_name

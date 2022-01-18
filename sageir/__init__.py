@@ -1,3 +1,4 @@
+from sageir import mp
 from sageir import ir
 from sageir.graph import *
 from sageir.sparse import gspmm

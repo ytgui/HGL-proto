@@ -1,54 +1,13 @@
 import torch
+import sageir
 import dgl as dgl
-import networkx as nx
 from torch import nn
+from sageir import mp
+from dgl.data import CoraGraphDataset
 
 
-class F:
-    @classmethod
-    def u_add_v(cls, u, v, e):
-        pass
-
-    @classmethod
-    def u_mul_e(cls, u, e, v):
-        pass
-
-    @classmethod
-    def edge_softmax(cls, e1, e2):
-        pass
-
-    @classmethod
-    def aggregate_sum(cls, e, v):
-        pass
-
-
-class MPGraph:
-    def __init__(self, adj: torch.Tensor):
-        self.adj = adj
-        self.edge = dict()
-        self.src_node = dict()
-        self.dst_node = dict()
-
-    def num_nodes(self) -> int:
-        return self.adj.size(0)
-
-    def out_degrees(self) -> torch.Tensor:
-        return torch.sum(self.adj, dim=1) 
-
-    def message_func(self, func):
-        # message function defined on each edge to generate a message
-        # by combining the edge feature with the features of its
-        # incident nodes
-        a = 0
-
-    def reduce_func(self, func):
-        # update function defined on each node to update the node
-        # feature by aggregating its incoming messages using the
-        # reduce function
-        a = 0
-
-
-class MPGATLayer(nn.Module):
+"""
+class GATLayer(nn.Module):
     def __init__(self, graph: MPGraph, in_features, out_features):
         super().__init__()
         #
@@ -60,14 +19,14 @@ class MPGATLayer(nn.Module):
 
     def forward(self, x):
         # different to bert
-        x = self.linear_v(x)
-        q = self.linear_q(x)
-        k = self.linear_k(x)
+        h = self.linear_v(x)
+        q = self.linear_q(h)
+        k = self.linear_k(h)
         self.graph.src_node['u'] = x
         self.graph.src_node['el'] = q
         self.graph.dst_node['er'] = k
 
-        # addition attention
+        # gat attention
         self.graph.message_func(
             F.u_add_v('el', 'er', 'e')
         )
@@ -87,15 +46,15 @@ class MPGATLayer(nn.Module):
         return self.graph.dst_node['v']
 
 
-class GATConv(nn.Module):
+class GATModel(nn.Module):
     def __init__(self, graph, in_features, hidden_features, out_features):
         super().__init__()
         #
         self.layer = nn.Sequential(
-            MPGATLayer(graph, in_features, hidden_features),
+            GATLayer(graph, in_features, hidden_features),
             nn.ELU(),
             nn.Dropout(),
-            MPGATLayer(graph, hidden_features, out_features)
+            GATLayer(graph, hidden_features, out_features)
         )
 
     def forwrad(self, x):
@@ -123,11 +82,76 @@ def test():
 
     #
     a = 0
+"""
+
+
+class GATLayer(nn.Module):
+    def __init__(self, in_features, out_features):
+        super().__init__()
+        #
+        self.linear_q = nn.Linear(out_features, 1)
+        self.linear_k = nn.Linear(out_features, 1)
+        self.linear_v = nn.Linear(in_features, out_features)
+        self.leaky_relu = nn.LeakyReLU(negative_slope=0.2)
+
+    def forward(self, graph: mp.Graph, x: torch.Tensor):
+        # different to bert
+        h = self.linear_v(x)
+        q = self.linear_q(h)
+        k = self.linear_k(h)
+        graph.src_node['u'] = h
+        graph.src_node['el'] = q
+        graph.dst_node['er'] = k
+
+        # gat attention
+        graph.message_func(mp.F.u_add_v('el', 'er', 'e'))
+        graph.edge['coeff'] = self.leaky_relu(graph.edge['e'])
+        """
+        graph.message_func(mp.F.edge_softmax('coeff', 'attn'))
+        graph.message_func(mp.F.u_mul_e('u', 'attn', 'm'))
+        graph.reduce_func(mp.F.aggregate_sum('m', 'v'))
+        return graph.dst_node['v']
+        """
+        return graph.edge['coeff']
+
+
+def test():
+    dataset = CoraGraphDataset(
+        verbose=False
+    )
+    dglgraph = dataset[0].to('cuda')
+    graph = mp.from_dglgraph(dglgraph)
+
+    #
+    label = dglgraph.ndata.pop(
+        'label'
+    ).type(torch.IntTensor)
+    feature = dglgraph.ndata.pop(
+        'feat'
+    ).type(torch.FloatTensor)
+    n_nodes = dglgraph.num_nodes()
+    n_labels = dataset.num_classes
+    n_features = feature.size(1)
+
+    #
+    d_hidden = 16
+    layer = GATLayer(
+        in_features=n_features,
+        out_features=d_hidden
+    ).to('cuda')
+    feature = feature.to('cuda')
+
+    #
+    mod2ir = sageir.Module2IR()
+    dataflow = mod2ir.transform(
+        layer, kwargs={
+            'graph': graph,
+            'x': feature
+        }
+    )
+    sageir.Printer().dump(dataflow)
+    a = 0
 
 
 if __name__ == "__main__":
-    # gat: message passing impl
-    # r-gat: migrate to heterograph
-    # translator: ir implementation detail
-    # draft refine: bottom up system, limited optimization, heterograph first
     test()

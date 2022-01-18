@@ -1,7 +1,7 @@
 import torch
 import sageir
 from torch import nn
-from sageir import ir
+from sageir import mp, ir
 from dgl import nn as dglnn
 from dgl.data import CoraGraphDataset
 from dgl.data.rdf import AIFBDataset, MUTAGDataset, AMDataset
@@ -163,7 +163,7 @@ def check_hetero():
 
 def test():
     for _ in tqdm(range(256)):
-        # check_homo()
+        check_homo()
         check_hetero()
 
 

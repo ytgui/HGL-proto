@@ -1,7 +1,7 @@
 import torch
 import sageir
 from torch import nn
-from sageir import ir, trace
+from sageir import mp, ir, trace
 
 
 class Module2IR:
@@ -81,6 +81,21 @@ class Module2IR:
                 return ir.OpTensor(
                     size=node_a.size()
                 )
+            elif node.previous_func == 'leaky_relu':
+                node_x, = node.previous_args
+                return ir.OpLeakyRelu(
+                    x=self._visit(node_x, kwargs)
+                )
+            elif node.previous_func == 'message_wrapper':
+                n_edges, func_name = node.previous_args
+                return ir.OpMessageFunc(
+                    size=[n_edges],
+                    prevs={
+                        k: self._visit(v, kwargs)
+                        for k, v in node.previous_kwargs.items()
+                    },
+                    func_name=func_name
+                )
             else:
                 raise NotImplementedError
         else:
@@ -105,7 +120,8 @@ class Module2IR:
                 return trace.Tracer(
                     torch.zeros_like(x, device='cpu')
                 ).to(x.device)
-            elif isinstance(x, (sageir.Block,
+            elif isinstance(x, (mp.Graph,
+                                sageir.Block,
                                 sageir.HeteroBlock)):
                 return x
             else:

@@ -7,6 +7,11 @@ class Block:
         self.size = size
         self.adj_sparse = adj
         self.rev_sparse = rev
+    
+    def num_edges(self):
+        indices = self.adj_sparse[1]
+        assert indices.dim() == 1
+        return indices.numel()
 
     @staticmethod
     def from_dglgraph(graph):
