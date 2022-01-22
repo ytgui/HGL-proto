@@ -22,6 +22,11 @@ class Printer:
                 params.append(
                     '{}: %{}'.format(k, nid)
                 )
+            if isinstance(node, (ir.OpVertFunc,
+                                 ir.OpEdgeFunc)):
+                params.insert(
+                    1, 'fn: {}'.format(node.func_name)
+                )
 
             #
             if node.name:

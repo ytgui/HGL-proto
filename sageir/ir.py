@@ -117,7 +117,17 @@ class OpLeakyRelu(OpTensor):
         )
 
 
-class OpMessageFunc(OpTensor):
+class OpVertFunc(OpTensor):
+    def __init__(self, size: list, prevs: dict, func_name: str):
+        OpTensor.__init__(
+            self,
+            size=size,
+            prevs=prevs
+        )
+        self.func_name = func_name
+
+
+class OpEdgeFunc(OpTensor):
     def __init__(self, size: list, prevs: dict, func_name: str):
         OpTensor.__init__(
             self,

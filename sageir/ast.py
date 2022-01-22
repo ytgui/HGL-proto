@@ -86,15 +86,31 @@ class Module2IR:
                 return ir.OpLeakyRelu(
                     x=self._visit(node_x, kwargs)
                 )
+            elif node.previous_func == 'reduce_wrapper':
+                block, func_name = node.previous_args
+                prevs = {
+                    'g': self._visit(block, kwargs)
+                }
+                prevs.update({
+                    k: self._visit(v, kwargs)
+                    for k, v in node.previous_kwargs.items()
+                })
+                return ir.OpVertFunc(
+                    size=[block.num_nodes()],
+                    prevs=prevs, func_name=func_name
+                )
             elif node.previous_func == 'message_wrapper':
-                n_edges, func_name = node.previous_args
-                return ir.OpMessageFunc(
-                    size=[n_edges],
-                    prevs={
-                        k: self._visit(v, kwargs)
-                        for k, v in node.previous_kwargs.items()
-                    },
-                    func_name=func_name
+                block, func_name = node.previous_args
+                prevs = {
+                    'g': self._visit(block, kwargs)
+                }
+                prevs.update({
+                    k: self._visit(v, kwargs)
+                    for k, v in node.previous_kwargs.items()
+                })
+                return ir.OpEdgeFunc(
+                    size=[block.num_edges()],
+                    prevs=prevs, func_name=func_name
                 )
             else:
                 raise NotImplementedError
@@ -130,6 +146,22 @@ class Module2IR:
 
         #
         output = model(**kwargs)
+
+        #
+        def post_process(kwargs):
+            post_insert = []
+            post_removal = []
+            for k, v in kwargs.items():
+                if isinstance(v, mp.Graph):
+                    post_removal.append(k)
+                    post_insert.append([k, v.blk])
+            for k in post_removal:
+                del kwargs[k]
+            for k, v in post_insert:
+                kwargs[k] = v
+            return kwargs
+        kwargs = post_process(kwargs)
+
         if isinstance(output, dict):
             root = {
                 k: self._visit(

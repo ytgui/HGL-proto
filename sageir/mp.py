@@ -5,8 +5,12 @@ from torch import overrides
 from sageir import graph
 
 
-def message_wrapper(n_edges, func, **kwargs):
-    return torch.zeros(size=[n_edges])
+def message_wrapper(block: graph.Block, func, **kwargs):
+    return torch.zeros(size=[block.num_edges()])
+
+
+def reduce_wrapper(block: graph.Block, func, **kwargs):
+    return torch.zeros(size=[block.num_nodes()])
 
 
 class F:
@@ -20,15 +24,27 @@ class F:
 
     @classmethod
     def u_mul_e(cls, u, e, v):
-        pass
+        desc = {
+            'func': 'u_mul_e',
+            'u': u, 'e': e, 'out': v
+        }
+        return desc
 
     @classmethod
     def edge_softmax(cls, e1, e2):
-        pass
+        desc = {
+            'func': 'edge_softmax',
+            'e': e1, 'out': e2
+        }
+        return desc
 
     @classmethod
     def aggregate_sum(cls, e, v):
-        pass
+        desc = {
+            'func': 'aggregate_sum',
+            'e': e, 'out': v
+        }
+        return desc
 
 
 class Graph:
@@ -38,7 +54,7 @@ class Graph:
         self.src_node = dict()
         self.dst_node = dict()
 
-    def message_func(self, desc: dict):
+    def _build_kwargs(self, desc: dict):
         kwargs = {}
         for k, v in desc.items():
             if k in ['func', 'out']:
@@ -49,19 +65,23 @@ class Graph:
                 if v not in data:
                     continue
                 kwargs[k] = data[v]
-        n_edges = self.blk.num_edges()
+        return kwargs
+
+    def message_func(self, desc: dict):
+        kwargs = self._build_kwargs(desc)
         self.edge[desc['out']] = \
             overrides.handle_torch_function(
-            message_wrapper,
-            kwargs.values(),
-            n_edges, desc['func'], **kwargs
+            message_wrapper, kwargs.values(),
+            self.blk, desc['func'], **kwargs
         )
 
     def reduce_func(self, desc):
-        a = 0
-
-    def update_func(self, desc):
-        a = 0
+        kwargs = self._build_kwargs(desc)
+        self.dst_node[desc['out']] = \
+            overrides.handle_torch_function(
+            reduce_wrapper, kwargs.values(),
+            self.blk, desc['func'], **kwargs
+        )
 
 
 def from_dglgraph(graph):

@@ -1,10 +1,9 @@
+import time
 import torch
 import random
 import sageir
-from torch import nn
+from torch import nn, autograd
 from tqdm import tqdm
-from dgl import nn as dglnn
-from dgl.data import CoraGraphDataset
 
 
 def to_dense(n_rows, n_cols, sparse):
@@ -73,6 +72,10 @@ def check_gspmm():
     rev_sparse = [
         v.to('cuda') for v in rev_sparse
     ]
+    block = sageir.Block(
+        size=[n_dst, n_src],
+        adj=adj_sparse, rev=rev_sparse
+    )
     adj_adjacency = adj_adjacency.to('cuda')
     linear = nn.Linear(
         n_features, n_features
@@ -90,9 +93,7 @@ def check_gspmm():
     #
     linear.zero_grad()
     y2 = sageir.gspmm(
-        adj_sparse,
-        rev_sparse,
-        linear(x)
+        block, linear(x)
     )
     y2.sum().backward()
     grad_2 = linear.weight.grad.clone()
@@ -106,70 +107,119 @@ def check_gspmm():
     )
 
 
-class GCNLayer(nn.Module):
-    def __init__(self,
-                 in_features: int,
-                 out_features: int):
-        nn.Module.__init__(self)
-        self.fc = nn.Linear(
-            in_features, out_features
+def leaky_relu(x, negative_slope):
+    return max(0, x) + negative_slope * min(0, x)
+
+
+def grad_leaky_relu(x, negative_slope):
+    if x < 0.0:
+        return negative_slope
+    return 1.0
+
+
+class GSDDMMFunction(autograd.Function):
+    @staticmethod
+    def forward(ctx, adj_sparse, q, k):
+        import graph_ext
+        ctx.adj_sparse = adj_sparse
+        indptr, indices = adj_sparse
+        attn_values = graph_ext.sddmm_forward(
+            indptr, indices, q, k
         )
+        #
+        ctx.save_for_backward(q, k, attn_values)
+        return attn_values
 
-    def forward(self,
-                block: sageir.Block,
-                x: torch.Tensor):
-        x = self.fc(x)
-        x = sageir.gspmm(
-            block.adj_sparse,
-            block.rev_sparse,
-            x
+    @staticmethod
+    def backward(ctx, grad_out):
+        indptr, indices = ctx.adj_sparse
+        q, k, attn_values = ctx.saved_tensors
+        assert len(ctx.needs_input_grad) == 3
+        assert ctx.needs_input_grad[0] is False
+        assert ctx.needs_input_grad[1] is True
+        assert ctx.needs_input_grad[2] is True
+        #
+        import graph_ext
+        grad_q, grad_k = graph_ext.sddmm_backward(
+            indptr, indices, q, k, attn_values, grad_out
         )
-        return x
+        #
+        return None, grad_q, grad_k
 
 
-def check_layer():
-    dataset = CoraGraphDataset(
-        verbose=False
+def check_gsddmm():
+    #
+    n_heads = 2
+    n_nodes = 3
+    n_features = 2
+
+    #
+    adj_adjacency = torch.FloatTensor([
+        [1.0, 1.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [0.0, 0.0, 1.0]
+    ])
+    adj_sparse = to_csr(adj_adjacency)
+
+    #
+    q = torch.randn(
+        size=[n_nodes, n_heads], device='cuda',
+        requires_grad=True
     )
-
-    #
-    graph = dataset[0].to('cuda')
-    block = sageir.from_dglgraph(graph)
-
-    #
-    n_inputs, d_hidden = 64, 16
-    feature = torch.randn([
-        graph.num_nodes(), n_inputs
-    ]).to('cuda')
-    layer1 = dglnn.GraphConv(
-        n_inputs, d_hidden, 'none'
-    ).to('cuda')
-    layer2 = GCNLayer(
-        n_inputs, d_hidden
-    ).to('cuda')
-
-    #
-    with torch.no_grad():
-        bias = layer1.bias
-        if bias is not None:
-            layer2.fc.bias.copy_(bias)
-        weight = layer1.weight.T
-        layer2.fc.weight.copy_(weight)
-
-    #
-    y1 = layer1(graph, feature)
-    y2 = layer2(block, feature)
-
-    #
-    assert torch.allclose(
-        y1, y2, atol=1e-3, rtol=1e-3
+    k = torch.randn(
+        size=[n_nodes, n_heads], device='cuda',
+        requires_grad=True
     )
+    adj_sparse = [
+        x.to('cuda') for x in adj_sparse
+    ]
+    adj_adjacency = adj_adjacency.to('cuda')
+
+    #
+    print('----- autograd -----')
+    coeff_r = k.repeat([n_nodes, 1])
+    coeff_l = q.repeat_interleave(n_nodes, dim=0)
+    coeff_e = (coeff_l + coeff_r).view(
+        [n_nodes, n_nodes, -1]
+    )
+    coeff_e = nn.LeakyReLU(
+        negative_slope=0.2
+    )(coeff_e)
+    coeff_e = torch.multiply(
+        adj_adjacency.unsqueeze(-1), coeff_e
+    )
+    negative = -9e15 * torch.ones_like(coeff_e)
+    coeff_e = torch.where(
+        adj_adjacency.unsqueeze(-1) > 0.0,
+        coeff_e, negative
+    )
+    attn_score = torch.softmax(coeff_e, dim=1)
+    torch.sum(attn_score[0, 0, :]).backward()
+    for i in range(n_heads):
+        print(attn_score[:, :, i])
+        print(q.grad.clone()[:, i])
+        print(k.grad.clone()[:, i])
+
+    #
+    print('----- custom fused -----')
+    q.grad.zero_()
+    k.grad.zero_()
+    output = GSDDMMFunction.apply(
+        adj_sparse, q, k
+    )
+    torch.sum(output[0, :]).backward()
+    for i in range(n_heads):
+        print(output[:, i])
+        print(q.grad.clone()[:, i])
+        print(k.grad.clone()[:, i])
+
+    return
 
 
 def test():
     for _ in tqdm(range(256)):
-        check_gspmm()
-        check_layer()
+        # check_gspmm()
+        check_gsddmm()
 
 
 if __name__ == "__main__":

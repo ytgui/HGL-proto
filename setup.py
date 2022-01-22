@@ -27,14 +27,25 @@ class TestCommand(Command):
                 break
 
 
+"""
+            libraries=[
+                'cublas'
+            ],
+            library_dirs=[
+                '/usr/local/cuda-11.4/targets/x86_64-linux/lib'
+            ]
+"""
+
+
 setup(
     name='graph_ext',
     ext_modules=[
         cpp_extension.CUDAExtension(
             'graph_ext',
             sources=[
-                'src/spmm.cpp',
-                'src/spmm_cuda.cu'
+                'src/entry.cpp',
+                'src/gcn_cuda.cu',
+                'src/gat_cuda.cu',
             ],
             include_dirs=[
                 'include'

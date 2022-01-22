@@ -1,3 +1,4 @@
+import torch
 import graph_ext
 from sageir import Block
 from torch import autograd, overrides
@@ -9,7 +10,7 @@ class GSPMMFunction(autograd.Function):
         adj_indptr = adj_sparse[0]
         adj_indices = adj_sparse[1]
         #
-        y = graph_ext.gspmm(
+        y = graph_ext.gcn_forward(
             adj_indptr,
             adj_indices,
             x
@@ -24,7 +25,7 @@ class GSPMMFunction(autograd.Function):
         rev_indices = ctx.rev_sparse[1]
         grad_out = grad_out.contiguous()
         #
-        grad_x = graph_ext.gspmm(
+        grad_x = graph_ext.gcn_forward(
             rev_indptr,
             rev_indices,
             grad_out,

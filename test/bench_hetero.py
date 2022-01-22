@@ -20,8 +20,7 @@ class RGCNLayer(nn.Module):
             {
                 ety: layer(*layer_args)
                 for ety in sorted(list(g.etypes))
-            },
-            aggregate='sum'
+            }, aggregate='sum'
         )
         self.activation = activation
         self.dropout = dropout
