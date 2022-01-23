@@ -2,11 +2,9 @@ import torch
 
 
 class Block:
-    def __init__(self, size=None,
-                 adj=None, rev=None):
+    def __init__(self, size=None, adj=None):
         self.size = size
         self.adj_sparse = adj
-        self.rev_sparse = rev
     
     def num_nodes(self):
         indptr = self.adj_sparse[0]

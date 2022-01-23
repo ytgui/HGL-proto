@@ -1,50 +1,86 @@
 import torch
 import graph_ext
-from sageir import Block
+from sageir import graph
 from torch import autograd, overrides
 
 
 class GSPMMFunction(autograd.Function):
     @staticmethod
-    def forward(ctx, adj_sparse, rev_sparse, x):
-        adj_indptr = adj_sparse[0]
-        adj_indices = adj_sparse[1]
+    def forward(ctx, mm_sizes, adj_sparse, adj_values, x):
+        m, n, k = mm_sizes
+        indptr = adj_sparse[0]
+        indices = adj_sparse[1]
         #
-        y = graph_ext.gcn_forward(
-            adj_indptr,
-            adj_indices,
+        y = graph_ext.spmm_forward(
+            adj_values, indptr, indices,
             x
         )
-        #
-        ctx.rev_sparse = rev_sparse
+        ctx.mm_sizes = mm_sizes
+        ctx.adj_sparse = adj_sparse
+        ctx.save_for_backward(adj_values, x)
         return y
 
     @staticmethod
     def backward(ctx, grad_out):
-        rev_indptr = ctx.rev_sparse[0]
-        rev_indices = ctx.rev_sparse[1]
+        m, n, k = ctx.mm_sizes
+        indptr = ctx.adj_sparse[0]
+        indices = ctx.adj_sparse[1]
+        values, x = ctx.saved_tensors
         grad_out = grad_out.contiguous()
+        assert len(ctx.needs_input_grad) == 4
+        assert ctx.needs_input_grad[0] is False
+        assert ctx.needs_input_grad[1] is False
         #
-        grad_x = graph_ext.gcn_forward(
-            rev_indptr,
-            rev_indices,
-            grad_out,
+        grad_a, grad_x = graph_ext.spmm_backward(
+            values, indptr, indices,
+            x, grad_out
         )
         #
-        return None, None, grad_x
+        return None, None, grad_a, grad_x
 
 
-def gspmm(block: Block, x):
+def gspmm(block: graph.Block, x):
+    raise NotImplementedError
+    """
     if overrides.has_torch_function_variadic(
         block, x
     ):
         return overrides.handle_torch_function(
-            gspmm,
-            (block, x),
-            block, x
+            gspmm, (block, x), block, x
         )
     return GSPMMFunction.apply(
         block.adj_sparse,
         block.rev_sparse,
         x
     )
+    """
+
+
+class GSDDMMFunction(autograd.Function):
+    @staticmethod
+    def forward(ctx, adj_sparse, query, key):
+        indptr, indices = adj_sparse
+        attn_values = graph_ext.sddmm_forward(
+            indptr, indices, query, key
+        )
+        #
+        ctx.adj_sparse = adj_sparse
+        ctx.save_for_backward(query, key, attn_values)
+        return attn_values
+
+    @staticmethod
+    def backward(ctx, grad_out):
+        grad_out = grad_out.contiguous()
+        indptr, indices = ctx.adj_sparse
+        query, key, attn_values = ctx.saved_tensors
+        assert len(ctx.needs_input_grad) == 3
+        assert ctx.needs_input_grad[0] is False
+        assert ctx.needs_input_grad[1] is True
+        assert ctx.needs_input_grad[2] is True
+        #
+        grad_query, grad_key = graph_ext.sddmm_backward(
+            indptr, indices, query, key,
+            attn_values, grad_out
+        )
+        #
+        return None, grad_query, grad_key

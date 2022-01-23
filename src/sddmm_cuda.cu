@@ -73,8 +73,8 @@ torch::Tensor _sddmm_forward_cuda(const torch::Tensor &indptr,
     TORCH_CHECK(indices.dim() == 1);
     TORCH_CHECK(query.dim() == 2);
     TORCH_CHECK(key.dim() == 2);
-    TORCH_CHECK(query.sizes() == key.sizes());
-
+    TORCH_CHECK(query.size(1) == key.size(1));
+    TORCH_CHECK(query.size(0) == indptr.size(0) - 1);
     int32_t n_heads = query.size(1);
     int32_t n_edges = indices.size(0);
     int32_t n_nodes = indptr.size(0) - 1;
@@ -99,7 +99,7 @@ std::vector<torch::Tensor> _sddmm_backward_cuda(const torch::Tensor &indptr,
     TORCH_CHECK(key.dim() == 2);
     TORCH_CHECK(attn_values.dim() == 2);
     TORCH_CHECK(grad_out.dim() == 2);
-    TORCH_CHECK(query.sizes() == key.sizes());
+    TORCH_CHECK(query.size(1) == key.size(1));
     TORCH_CHECK(indices.size(0) == attn_values.size(0));
     TORCH_CHECK(attn_values.sizes() == grad_out.sizes());
 

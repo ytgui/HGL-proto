@@ -44,8 +44,8 @@ setup(
             'graph_ext',
             sources=[
                 'src/entry.cpp',
-                'src/gcn_cuda.cu',
-                'src/gat_cuda.cu',
+                'src/spmm_cuda.cu',
+                'src/sddmm_cuda.cu',
             ],
             include_dirs=[
                 'include'
