@@ -1,6 +1,6 @@
 import torch
 import random
-from torch import nn, autograd
+from torch import nn
 from sageir import sparse, convert
 from tqdm import tqdm
 
@@ -10,10 +10,6 @@ def check_gspmm():
     n_src = random.randint(1, 512)
     n_dst = random.randint(1, 512)
     n_heads = random.randint(1, 32)
-    """
-    density = 0.2
-    n_src, n_dst, n_heads = 2, 3, 2
-    """
     n_features = random.randint(1, 256)
 
     #

@@ -34,21 +34,6 @@ class OpTensor(Op):
             n.next = self
 
 
-"""
-class OpTuple(Op):
-    def __init__(self, prevs: List[Op], name: str = ''):
-        assert len(prevs) > 0
-        prevs = {
-            i: x
-            for i, x in enumerate(prevs)
-        }
-        Op.__init__(self, prevs, name)
-        self.size = [len(prevs)]
-        for n in prevs.values():
-            n.next = self
-"""
-
-
 class OpAdd(OpTensor):
     def __init__(self,
                  a: OpTensor,
@@ -92,16 +77,35 @@ class OpLinear(OpTensor):
 
 class OpGSPMM(OpTensor):
     def __init__(self,
-                 b: OpGraph,
+                 graph: OpGraph,
                  x: OpTensor,
                  name: str = ''):
         assert len(x.size) == 2
         OpTensor.__init__(
             self,
-            size=[b.size[0], x.size[1]],
-            prevs={'b': b, 'x': x},
+            size=[graph.size[0], x.size[1]],
+            prevs={'g': graph, 'x': x},
             name=name
         )
+
+
+class OpFusedSDDMM(OpGraph):
+    def __init__(self,
+                 graph: OpGraph,
+                 query: OpTensor,
+                 key: OpTensor,
+                 fusion_scheme: str,
+                 name: str = ''):
+        assert len(query.size) == 2
+        assert len(key.size) == 2
+        assert query.size[1] == key.size[1]
+        OpTensor.__init__(
+            self,
+            size=[query.size[0], key.size[0]],
+            prevs={'g': graph, 'q': query, 'k': key},
+            name=name
+        )
+        self.fusion_scheme = fusion_scheme
 
 
 class OpLeakyRelu(OpTensor):

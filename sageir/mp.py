@@ -1,6 +1,5 @@
 import torch
 import sageir
-import dgl as dgl
 from torch import overrides
 from sageir import graph
 
@@ -13,7 +12,7 @@ def reduce_wrapper(block: graph.Block, func, **kwargs):
     return torch.zeros(size=[block.num_nodes()])
 
 
-class F:
+class Fn:
     @classmethod
     def u_add_v(cls, u, v, e):
         desc = {
@@ -85,11 +84,4 @@ class Graph:
 
 
 def from_dglgraph(graph):
-    import dgl
-    assert isinstance(
-        graph, (
-            dgl.DGLGraph,
-            dgl.DGLHeteroGraph
-        )
-    )
     return Graph(sageir.from_dglgraph(graph))

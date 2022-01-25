@@ -3,7 +3,7 @@ import sageir
 import dgl as dgl
 from torch import nn
 from sageir import mp
-from dgl.data import CoraGraphDataset
+from dgl.data import CoraGraphDataset, RedditDataset
 from tqdm import tqdm
 
 
@@ -26,16 +26,18 @@ class GATLayer(nn.Module):
         graph.dst_node['k'] = k
 
         # gat attention
-        graph.message_func(mp.F.u_add_v('q', 'k', 'e'))
+        graph.message_func(mp.Fn.u_add_v('q', 'k', 'e'))
         graph.edge['coeff'] = self.leaky_relu(graph.edge['e'])
-        graph.message_func(mp.F.edge_softmax('coeff', 'attn'))
-        graph.message_func(mp.F.u_mul_e('u', 'attn', 'm'))
-        graph.reduce_func(mp.F.aggregate_sum('m', 'v'))
+        graph.message_func(mp.Fn.edge_softmax('coeff', 'attn'))
+        graph.message_func(mp.Fn.u_mul_e('u', 'attn', 'm'))
+        graph.reduce_func(mp.Fn.aggregate_sum('m', 'v'))
         return graph.dst_node['v']
 
 
 def check_homo():
-    dataset = CoraGraphDataset(verbose=False)
+    dataset = CoraGraphDataset(
+        verbose=False
+    )
     dglgraph = dataset[0].to('cuda')
     graph = mp.from_dglgraph(dglgraph)
 
@@ -52,16 +54,17 @@ def check_homo():
 
     #
     d_hidden = 16
-    layer = GATLayer(
+    model = GATLayer(
         in_features=n_features,
         out_features=d_hidden
     ).to('cuda')
     feature = feature.to('cuda')
 
     #
+    print('===== mod2ir =====')
     mod2ir = sageir.Module2IR()
     dataflow = mod2ir.transform(
-        layer, kwargs={
+        model, kwargs={
             'graph': graph,
             'x': feature
         }
@@ -69,6 +72,7 @@ def check_homo():
     sageir.Printer().dump(dataflow)
 
     #
+    print('===== optimizer =====')
     optimizer = sageir.Optimizer()
     dataflow = optimizer.lower(dataflow)
     sageir.Printer().dump(dataflow)

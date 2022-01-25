@@ -5,12 +5,12 @@ class Block:
     def __init__(self, size=None, adj=None):
         self.size = size
         self.adj_sparse = adj
-    
+
     def num_nodes(self):
         indptr = self.adj_sparse[0]
         assert indptr.dim() == 1
         return indptr.numel() - 1
-    
+
     def num_edges(self):
         indices = self.adj_sparse[1]
         assert indices.dim() == 1
@@ -29,10 +29,6 @@ class Block:
             transpose=True,
             scipy_fmt='csr'
         )
-        rev = graph.adj(
-            transpose=False,
-            scipy_fmt='csr'
-        )
         block = Block(
             size=[
                 graph.num_nodes(),
@@ -44,14 +40,6 @@ class Block:
                 ).to(graph.device),
                 torch.IntTensor(
                     adj.indices
-                ).to(graph.device)
-            ],
-            rev=[
-                torch.IntTensor(
-                    rev.indptr
-                ).to(graph.device),
-                torch.IntTensor(
-                    rev.indices
                 ).to(graph.device)
             ]
         )
@@ -87,11 +75,6 @@ class HeteroBlock:
                 scipy_fmt='csr',
                 etype=(sty, ety, dty)
             )
-            rev = graph.adj(
-                transpose=False,
-                scipy_fmt='csr',
-                etype=(sty, ety, dty)
-            )
             hblock.rel2idx[
                 sty, ety, dty
             ] = len(hblock.rel2idx)
@@ -108,14 +91,6 @@ class HeteroBlock:
                     ).to(graph.device),
                     torch.IntTensor(
                         adj.indices
-                    ).to(graph.device)
-                ],
-                rev=[
-                    torch.IntTensor(
-                        rev.indptr
-                    ).to(graph.device),
-                    torch.IntTensor(
-                        rev.indices
                     ).to(graph.device)
                 ]
             )

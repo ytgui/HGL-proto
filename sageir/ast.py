@@ -6,18 +6,22 @@ from sageir import mp, ir, trace
 
 class Module2IR:
     def __init__(self):
-        pass
+        self._tracer2ir = dict()
 
-    def _visit(self, node, kwargs):
-        if isinstance(node, (int, float)):
-            return ir.OpTensor(
-                size=[1]
-            )
-        elif isinstance(node, sageir.Block):
+    def _visit(self, node, kwargs: dict):
+        #
+        if node in self._tracer2ir:
+            return self._tracer2ir[node]
+
+        #
+        if isinstance(node, sageir.Block):
             for k, g in kwargs.items():
                 if g != node:
                     continue
-                return ir.OpGraph(g, name=k)
+                self._tracer2ir[node] = ir.OpGraph(
+                    g, name=k
+                )
+                return self._tracer2ir[node]
             for k, het in kwargs.items():
                 if not isinstance(
                     het, sageir.HeteroBlock
@@ -27,65 +31,41 @@ class Module2IR:
                         het.hetero_graph.items():
                     if blk != node:
                         continue
-                    return ir.OpGraph(
+                    self._tracer2ir[node] = ir.OpGraph(
                         blk,
                         name='{}.{}'.format(
                             k, het.rel2idx[rel]
                         )
                     )
+                    return self._tracer2ir[node]
             raise RuntimeError
         elif isinstance(node, trace.Tracer):
             if not node.previous_func:
-                return ir.OpTensor(
-                    size=node.size()
-                )
+                for k, v in kwargs.items():
+                    if id(v) != id(node):
+                        continue
+                    self._tracer2ir[node] = ir.OpTensor(
+                        size=node.size(),
+                        name=k
+                    )
+                    return self._tracer2ir[node]
+                raise RuntimeError
             elif node.previous_func == 'linear':
                 node_b = None
                 if 'bias' in node.previous_kwargs:
                     node_b = node.previous_kwargs['bias']
                 node_x, node_w = node.previous_args
-                return ir.OpLinear(
+                self._tracer2ir[node] = ir.OpLinear(
                     x=self._visit(node_x, kwargs),
                     w=node_w, b=node_b
                 )
-            elif node.previous_func == 'gspmm':
-                node_b, node_x = node.previous_args
-                return ir.OpGSPMM(
-                    b=self._visit(node_b, kwargs),
-                    x=self._visit(node_x, kwargs)
-                )
-            elif node.previous_func == 'div':
-                node_a, node_b = node.previous_args
-                if isinstance(node_a, (int, float)):
-                    node_a = 1.0 / node_a
-                    return ir.OpMul(
-                        a=self._visit(node_a, kwargs),
-                        b=self._visit(node_b, kwargs)
-                    )
-                if isinstance(node_b, (int, float)):
-                    node_b = 1.0 / node_b
-                    return ir.OpMul(
-                        a=self._visit(node_b, kwargs),
-                        b=self._visit(node_a, kwargs)
-                    )
-                else:
-                    raise NotImplementedError
-            elif node.previous_func == 'add':
-                node_a, node_b = node.previous_args
-                return ir.OpAdd(
-                    a=self._visit(node_a, kwargs),
-                    b=self._visit(node_b, kwargs)
-                )
-            elif node.previous_func == 'zeros':
-                node_a, = node.previous_args
-                return ir.OpTensor(
-                    size=node_a.size()
-                )
+                return self._tracer2ir[node]
             elif node.previous_func == 'leaky_relu':
                 node_x, = node.previous_args
-                return ir.OpLeakyRelu(
+                self._tracer2ir[node] = ir.OpLeakyRelu(
                     x=self._visit(node_x, kwargs)
                 )
+                return self._tracer2ir[node]
             elif node.previous_func == 'reduce_wrapper':
                 block, func_name = node.previous_args
                 prevs = {
@@ -95,10 +75,11 @@ class Module2IR:
                     k: self._visit(v, kwargs)
                     for k, v in node.previous_kwargs.items()
                 })
-                return ir.OpVertFunc(
+                self._tracer2ir[node] = ir.OpVertFunc(
                     size=[block.num_nodes()],
                     prevs=prevs, func_name=func_name
                 )
+                return self._tracer2ir[node]
             elif node.previous_func == 'message_wrapper':
                 block, func_name = node.previous_args
                 prevs = {
@@ -108,20 +89,18 @@ class Module2IR:
                     k: self._visit(v, kwargs)
                     for k, v in node.previous_kwargs.items()
                 })
-                return ir.OpEdgeFunc(
+                self._tracer2ir[node] = ir.OpEdgeFunc(
                     size=[block.num_edges()],
                     prevs=prevs, func_name=func_name
                 )
+                return self._tracer2ir[node]
             else:
                 raise NotImplementedError
         else:
-            if isinstance(node, torch.Tensor):
-                return ir.OpTensor(
-                    size=node.size()
-                )
             raise NotImplementedError
 
     def transform(self, model: nn.Module, kwargs: dict) -> ir.Op:
+        # build tracer
         def process(x):
             if isinstance(x, dict):
                 return {
@@ -136,9 +115,7 @@ class Module2IR:
                 return trace.Tracer(
                     torch.zeros_like(x, device='cpu')
                 ).to(x.device)
-            elif isinstance(x, (mp.Graph,
-                                sageir.Block,
-                                sageir.HeteroBlock)):
+            elif isinstance(x, mp.Graph):
                 return x
             else:
                 raise NotImplementedError
@@ -147,7 +124,7 @@ class Module2IR:
         #
         output = model(**kwargs)
 
-        #
+        # replace mp.Graph
         def post_process(kwargs):
             post_insert = []
             post_removal = []
@@ -162,6 +139,7 @@ class Module2IR:
             return kwargs
         kwargs = post_process(kwargs)
 
+        # transform to ir by tracer
         if isinstance(output, dict):
             root = {
                 k: self._visit(
