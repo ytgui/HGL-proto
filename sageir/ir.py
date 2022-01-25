@@ -60,6 +60,20 @@ class OpMul(OpTensor):
         )
 
 
+class OpView(OpTensor):
+    def __init__(self,
+                 x: OpTensor,
+                 size: list,
+                 name: str = ''):
+        size = list(size)
+        OpTensor.__init__(
+            self,
+            size=size,
+            prevs={'x': x},
+            name=name
+        )
+
+
 class OpLinear(OpTensor):
     def __init__(self,
                  x: OpTensor,
@@ -78,13 +92,15 @@ class OpLinear(OpTensor):
 class OpGSPMM(OpTensor):
     def __init__(self,
                  graph: OpGraph,
+                 edge: OpTensor,
                  x: OpTensor,
                  name: str = ''):
-        assert len(x.size) == 2
+        assert len(edge.size) == 2
+        assert len(x.size) == 3
         OpTensor.__init__(
             self,
-            size=[graph.size[0], x.size[1]],
-            prevs={'g': graph, 'x': x},
+            size=[graph.size[0], *x.size[1:]],
+            prevs={'g': graph, 'e': edge, 'x': x},
             name=name
         )
 

@@ -50,6 +50,13 @@ class Module2IR:
                     )
                     return self._tracer2ir[node]
                 raise RuntimeError
+            elif node.previous_func == 'view':
+                node_x, = node.previous_args
+                self._tracer2ir[node] = ir.OpView(
+                        x=self._visit(node_x, kwargs),
+                        size=node.previous_kwargs['size']
+                    )
+                return self._tracer2ir[node]
             elif node.previous_func == 'linear':
                 node_b = None
                 if 'bias' in node.previous_kwargs:

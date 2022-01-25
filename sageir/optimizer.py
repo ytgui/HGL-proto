@@ -15,21 +15,23 @@ class Optimizer:
             root_node.prevs[name] = child
 
         # transform
-        edge_node = None
+        aggre_node = None
         if isinstance(root_node, ir.OpVertFunc):
             if root_node.func_name != 'aggregate_sum':
                 raise NotImplementedError
-            edge_node = root_node.prevs['e']
-        if isinstance(edge_node, ir.OpEdgeFunc):
-            if edge_node.func_name != 'u_mul_e':
+            aggre_node = root_node.prevs['e']
+        if isinstance(aggre_node, ir.OpEdgeFunc):
+            if aggre_node.func_name != 'u_mul_e':
                 raise NotImplementedError
-            x_node = edge_node.prevs['u']
-            graph_node = edge_node.prevs['e']
-            if not isinstance(graph_node,
+            x_node = aggre_node.prevs['u']
+            edge_node = aggre_node.prevs['e']
+            graph_node = edge_node.prevs['g']
+            if not isinstance(edge_node,
                               ir.OpFusedSDDMM):
                 raise NotImplementedError
             root_node = ir.OpGSPMM(
-                graph=graph_node, x=x_node
+                graph=graph_node,
+                edge=edge_node, x=x_node
             )
             return root_node
 

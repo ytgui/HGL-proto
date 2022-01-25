@@ -23,7 +23,6 @@ def check_gspmm():
         )
         if adj_adjacency.max() != 0.0:
             break
-    mm_sizes = [n_dst, n_features, n_src]
     indptr, indices = convert.to_csr(adj_adjacency)
 
     #
@@ -61,7 +60,7 @@ def check_gspmm():
     #
     linear.zero_grad()
     y_2 = sparse.GSPMMFunction.apply(
-        mm_sizes, adj_sparse, values, linear(x)
+        adj_sparse, values, linear(x)
     )
     y_2.sum().backward()
     grad_3 = linear.weight.grad.clone()
@@ -100,7 +99,6 @@ def check_gsddmm():
         )
         if adj_adjacency.max() != 0.0:
             break
-    mm_sizes = [n_dst, n_features, n_src]
     indptr, indices = convert.to_csr(adj_adjacency)
 
     #
@@ -159,7 +157,7 @@ def check_gsddmm():
         adj_sparse, q, k
     )
     y_2 = sparse.GSPMMFunction.apply(
-        mm_sizes, adj_sparse, attn_2, x_src
+        adj_sparse, attn_2, x_src
     )
     y_2.sum().backward()
     grad_q_2 = linear_q.weight.grad.clone()

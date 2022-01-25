@@ -6,8 +6,7 @@ from torch import autograd, overrides
 
 class GSPMMFunction(autograd.Function):
     @staticmethod
-    def forward(ctx, mm_sizes, adj_sparse, adj_values, x):
-        m, n, k = mm_sizes
+    def forward(ctx, adj_sparse, adj_values, x):
         indptr = adj_sparse[0]
         indices = adj_sparse[1]
         #
@@ -15,45 +14,33 @@ class GSPMMFunction(autograd.Function):
             adj_values, indptr, indices,
             x
         )
-        ctx.mm_sizes = mm_sizes
         ctx.adj_sparse = adj_sparse
         ctx.save_for_backward(adj_values, x)
         return y
 
     @staticmethod
     def backward(ctx, grad_out):
-        m, n, k = ctx.mm_sizes
         indptr = ctx.adj_sparse[0]
         indices = ctx.adj_sparse[1]
         values, x = ctx.saved_tensors
         grad_out = grad_out.contiguous()
-        assert len(ctx.needs_input_grad) == 4
+        assert len(ctx.needs_input_grad) == 3
         assert ctx.needs_input_grad[0] is False
-        assert ctx.needs_input_grad[1] is False
         #
         grad_a, grad_x = graph_ext.spmm_backward(
             values, indptr, indices,
             x, grad_out
         )
         #
-        return None, None, grad_a, grad_x
+        return None, grad_a, grad_x
 
 
-def gspmm(block: graph.Block, x):
-    raise NotImplementedError
-    """
-    if overrides.has_torch_function_variadic(
-        block, x
-    ):
-        return overrides.handle_torch_function(
-            gspmm, (block, x), block, x
-        )
+def gspmm(block: graph.Block,
+          edge: torch.Tensor,
+          x: torch.Tensor):
     return GSPMMFunction.apply(
-        block.adj_sparse,
-        block.rev_sparse,
-        x
+        block.adj_sparse, edge, x
     )
-    """
 
 
 class GSDDMMFunction(autograd.Function):
@@ -84,3 +71,11 @@ class GSDDMMFunction(autograd.Function):
         )
         #
         return None, grad_query, grad_key
+
+
+def fused_gsddmm(block: graph.Block,
+                 query: torch.Tensor,
+                 key: torch.Tensor):
+    return GSDDMMFunction.apply(
+        block.adj_sparse, query, key
+    )
