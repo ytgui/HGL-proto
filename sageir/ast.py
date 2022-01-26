@@ -10,6 +10,8 @@ class Module2IR:
 
     def _visit(self, node, kwargs: dict):
         #
+        if isinstance(node, mp.Graph):
+            node = node.blk
         if node in self._tracer2ir:
             return self._tracer2ir[node]
 
@@ -50,12 +52,25 @@ class Module2IR:
                     )
                     return self._tracer2ir[node]
                 raise RuntimeError
+            elif node.previous_func == 'elu':
+                node_x, = node.previous_args
+                self._tracer2ir[node] = ir.OpELU(
+                    x=self._visit(node_x, kwargs)
+                )
+                return self._tracer2ir[node]
             elif node.previous_func == 'view':
                 node_x, = node.previous_args
                 self._tracer2ir[node] = ir.OpView(
-                        x=self._visit(node_x, kwargs),
-                        size=node.previous_kwargs['size']
-                    )
+                    x=self._visit(node_x, kwargs),
+                    size=node.previous_kwargs['size']
+                )
+                return self._tracer2ir[node]
+            elif node.previous_func == 'mean':
+                node_x, = node.previous_args
+                self._tracer2ir[node] = ir.OpMean(
+                    x=self._visit(node_x, kwargs),
+                    dim=node.previous_kwargs['dim']
+                )
                 return self._tracer2ir[node]
             elif node.previous_func == 'linear':
                 node_b = None
@@ -65,6 +80,14 @@ class Module2IR:
                 self._tracer2ir[node] = ir.OpLinear(
                     x=self._visit(node_x, kwargs),
                     w=node_w, b=node_b
+                )
+                return self._tracer2ir[node]
+            elif node.previous_func == 'dropout':
+                node_x, = node.previous_args
+                self._tracer2ir[node] = ir.OpDropout(
+                    x=self._visit(node_x, kwargs),
+                    p=node.previous_kwargs['p'],
+                    training=node.previous_kwargs['training']
                 )
                 return self._tracer2ir[node]
             elif node.previous_func == 'leaky_relu':
@@ -83,7 +106,7 @@ class Module2IR:
                     for k, v in node.previous_kwargs.items()
                 })
                 self._tracer2ir[node] = ir.OpVertFunc(
-                    size=[block.num_nodes()],
+                    size=node.size(),
                     prevs=prevs, func_name=func_name
                 )
                 return self._tracer2ir[node]
@@ -97,7 +120,7 @@ class Module2IR:
                     for k, v in node.previous_kwargs.items()
                 })
                 self._tracer2ir[node] = ir.OpEdgeFunc(
-                    size=[block.num_edges()],
+                    size=node.size(),
                     prevs=prevs, func_name=func_name
                 )
                 return self._tracer2ir[node]

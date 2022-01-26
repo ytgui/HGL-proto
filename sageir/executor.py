@@ -4,9 +4,6 @@ from sageir import mp, ir, graph, sparse
 
 
 class Executor:
-    def __init__(self):
-        pass
-
     def _execute(self, root_node: ir.Op, kwargs: dict):
         child_args = {
             k: self._execute(v, kwargs)
@@ -30,9 +27,24 @@ class Executor:
                 weight=root_node.ref_params['weight'],
                 bias=root_node.ref_params['bias']
             )
+        elif isinstance(root_node, ir.OpDropout):
+            return functional.dropout(
+                child_args['x'],
+                p=root_node.val_params['p'],
+                training=root_node.val_params['training']
+            )
+        elif isinstance(root_node, ir.OpMean):
+            return torch.mean(
+                child_args['x'],
+                dim=root_node.val_params['dim']
+            )
         elif isinstance(root_node, ir.OpView):
             return child_args['x'].view(
                 size=root_node.size
+            )
+        elif isinstance(root_node, ir.OpELU):
+            return functional.elu(
+                child_args['x']
             )
         else:
             if root_node.name in kwargs:

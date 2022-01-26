@@ -6,15 +6,19 @@ class Block:
         self.size = size
         self.adj_sparse = adj
 
-    def num_nodes(self):
-        indptr = self.adj_sparse[0]
-        assert indptr.dim() == 1
-        return indptr.numel() - 1
-
     def num_edges(self):
         indices = self.adj_sparse[1]
         assert indices.dim() == 1
         return indices.numel()
+
+    def num_src_nodes(self):
+        return self.size[1]
+
+    def num_dst_nodes(self):
+        indptr = self.adj_sparse[0]
+        assert indptr.dim() == 1
+        assert self.size[0] == indptr.size(0) - 1
+        return self.size[0]
 
     @staticmethod
     def from_dglgraph(graph):

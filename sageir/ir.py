@@ -74,6 +74,22 @@ class OpView(OpTensor):
         )
 
 
+class OpMean(OpTensor):
+    def __init__(self,
+                 x: OpTensor,
+                 dim: int,
+                 name: str = ''):
+        assert dim < len(x.size)
+        size = x.size[:dim] + x.size[dim+1:]
+        OpTensor.__init__(
+            self,
+            size=size,
+            prevs={'x': x},
+            name=name
+        )
+        self.val_params['dim'] = dim
+
+
 class OpLinear(OpTensor):
     def __init__(self,
                  x: OpTensor,
@@ -87,6 +103,21 @@ class OpLinear(OpTensor):
             name=name
         )
         self.ref_params = {'weight': w, 'bias': b}
+
+
+class OpDropout(OpTensor):
+    def __init__(self,
+                 x: OpTensor,
+                 p: float,
+                 training: bool,
+                 name: str = ''):
+        OpTensor.__init__(
+            self,
+            size=x.size,
+            prevs={'x': x},
+            name=name
+        )
+        self.val_params = {'p': p, 'training': training}
 
 
 class OpGSPMM(OpTensor):
@@ -124,11 +155,22 @@ class OpFusedSDDMM(OpGraph):
         self.fusion_scheme = fusion_scheme
 
 
+class OpELU(OpTensor):
+    def __init__(self,
+                 x: OpTensor,
+                 name: str = ''):
+        OpTensor.__init__(
+            self,
+            size=x.size,
+            prevs={'x': x},
+            name=name
+        )
+
+
 class OpLeakyRelu(OpTensor):
     def __init__(self,
                  x: OpTensor,
                  name: str = ''):
-        assert len(x.size) == 1
         OpTensor.__init__(
             self,
             size=x.size,

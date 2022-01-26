@@ -4,12 +4,29 @@ from torch import overrides
 from sageir import graph
 
 
-def message_wrapper(block: graph.Block, func, **kwargs):
-    return torch.zeros(size=[block.num_edges()])
+def message_wrapper(graph, func, **kwargs):
+    n_heads = None
+    for v in kwargs.values():
+        assert v.dim() in [2, 3]
+        if not n_heads:
+            n_heads = v.size(1)
+        assert n_heads == v.size(1)
+    return torch.zeros(
+        size=[graph.num_edges(), n_heads],
+        device=graph.device()
+    )
 
 
-def reduce_wrapper(block: graph.Block, func, **kwargs):
-    return torch.zeros(size=[block.num_nodes()])
+def reduce_wrapper(graph, func, **kwargs):
+    n_heads = None
+    for v in kwargs.values():
+        assert v.dim() in [2]
+        if not n_heads:
+            n_heads = v.size(1)
+        assert n_heads == v.size(1)
+    return torch.zeros(
+        size=[graph.num_dst_nodes(), n_heads, graph.num_features()],
+        device=graph.device())
 
 
 class Fn:
@@ -53,6 +70,32 @@ class Graph:
         self.src_node = dict()
         self.dst_node = dict()
 
+    def device(self):
+        for v in self.src_node.values():
+            return v.device
+        raise RuntimeError
+
+    def num_edges(self):
+        return self.blk.num_edges()
+
+    def num_src_nodes(self):
+        return self.blk.num_src_nodes()
+
+    def num_dst_nodes(self):
+        return self.blk.num_dst_nodes()
+
+    def num_features(self):
+        # TODO: fix workaround
+        n_features = None
+        for v in self.src_node.values():
+            if v.dim() != 3:
+                continue
+            if not n_features:
+                n_features = v.size(-1)
+            assert n_features == v.size(-1)
+        assert n_features
+        return n_features
+
     def _build_kwargs(self, desc: dict):
         kwargs = {}
         for k, v in desc.items():
@@ -71,7 +114,7 @@ class Graph:
         self.edge[desc['out']] = \
             overrides.handle_torch_function(
             message_wrapper, kwargs.values(),
-            self.blk, desc['func'], **kwargs
+            self, desc['func'], **kwargs
         )
 
     def reduce_func(self, desc):
@@ -79,7 +122,7 @@ class Graph:
         self.dst_node[desc['out']] = \
             overrides.handle_torch_function(
             reduce_wrapper, kwargs.values(),
-            self.blk, desc['func'], **kwargs
+            self, desc['func'], **kwargs
         )
 
 

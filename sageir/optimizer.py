@@ -11,7 +11,7 @@ class Optimizer:
         # recursive
         for name in root_node.prevs:
             child = root_node.prevs[name]
-            child = self._lower_sddmm(child)
+            child = self._lower_spmm(child)
             root_node.prevs[name] = child
 
         # transform
@@ -33,7 +33,8 @@ class Optimizer:
                 graph=graph_node,
                 edge=edge_node, x=x_node
             )
-            return root_node
+
+        return root_node
 
     def _lower_sddmm(self, root_node: ir.Op):
         # recursive
