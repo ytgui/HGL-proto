@@ -58,6 +58,7 @@ class Optimizer:
                 query_node = sddmm_node.prevs['v']
                 key_node = sddmm_node.prevs['u']
                 root_node = ir.OpFusedSDDMM(
+                    size=leaky_node.size,
                     graph=graph_node,
                     query=query_node,
                     key=key_node,

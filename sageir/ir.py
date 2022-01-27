@@ -130,7 +130,7 @@ class OpGSPMM(OpTensor):
         assert len(x.size) == 3
         OpTensor.__init__(
             self,
-            size=[graph.size[0], *x.size[1:]],
+            size=x.size,
             prevs={'g': graph, 'e': edge, 'x': x},
             name=name
         )
@@ -138,6 +138,7 @@ class OpGSPMM(OpTensor):
 
 class OpFusedSDDMM(OpGraph):
     def __init__(self,
+                 size: list,
                  graph: OpGraph,
                  query: OpTensor,
                  key: OpTensor,
@@ -148,7 +149,7 @@ class OpFusedSDDMM(OpGraph):
         assert query.size[1] == key.size[1]
         OpTensor.__init__(
             self,
-            size=[query.size[0], key.size[0]],
+            size=size,
             prevs={'g': graph, 'q': query, 'k': key},
             name=name
         )
