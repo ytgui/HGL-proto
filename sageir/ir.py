@@ -1,7 +1,7 @@
 import torch
 from torch import nn
-from sageir import graph
-from typing import List, Union
+from sageir import block
+from typing import List, Dict, Union
 
 
 class Op:
@@ -17,10 +17,10 @@ class Op:
 
 
 class OpGraph(Op):
-    def __init__(self, g: graph.Block, name: str):
+    def __init__(self, blk: block.Block, name: str):
         Op.__init__(self, {}, name)
-        assert g.size and len(g.size)
-        self.size = g.size
+        assert blk.size
+        self.size = blk.size
 
 
 class OpTensor(Op):
@@ -39,6 +39,7 @@ class OpAdd(OpTensor):
                  a: OpTensor,
                  b: OpTensor,
                  name: str = ''):
+        assert a.size == b.size
         OpTensor.__init__(
             self,
             size=b.size,
@@ -90,6 +91,20 @@ class OpMean(OpTensor):
         self.val_params['dim'] = dim
 
 
+class OpScale(OpTensor):
+    def __init__(self,
+                 scale: float,
+                 x: OpTensor,
+                 name: str = ''):
+        OpTensor.__init__(
+            self,
+            size=x.size,
+            prevs={'x': x},
+            name=name
+        )
+        self.val_params['scale'] = scale
+
+
 class OpLinear(OpTensor):
     def __init__(self,
                  x: OpTensor,
@@ -109,7 +124,6 @@ class OpDropout(OpTensor):
     def __init__(self,
                  x: OpTensor,
                  p: float,
-                 training: bool,
                  name: str = ''):
         OpTensor.__init__(
             self,
@@ -117,7 +131,7 @@ class OpDropout(OpTensor):
             prevs={'x': x},
             name=name
         )
-        self.val_params = {'p': p, 'training': training}
+        self.val_params = {'p': p}
 
 
 class OpGSPMM(OpTensor):
@@ -144,9 +158,12 @@ class OpFusedSDDMM(OpGraph):
                  key: OpTensor,
                  fusion_scheme: str,
                  name: str = ''):
+        assert len(graph.size) == 2
         assert len(query.size) == 2
         assert len(key.size) == 2
         assert query.size[1] == key.size[1]
+        assert graph.size[0] == query.size[0]
+        assert graph.size[1] == key.size[0]
         OpTensor.__init__(
             self,
             size=size,

@@ -70,7 +70,17 @@ class Optimizer:
         return root_node
 
     def lower(self, dataflow: ir.Op):
-        dataflow = self._lower_spmm(
-            self._lower_sddmm(dataflow)
-        )
+        if isinstance(dataflow, dict):
+            dataflow = {
+                k: self._lower_spmm(
+                    self._lower_sddmm(v)
+                )
+                for k, v in dataflow.items()
+            }
+        elif isinstance(dataflow, ir.Op):
+            dataflow = self._lower_spmm(
+                self._lower_sddmm(dataflow)
+            )
+        else:
+            raise NotImplementedError
         return dataflow

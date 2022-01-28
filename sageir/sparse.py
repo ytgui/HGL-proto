@@ -1,6 +1,6 @@
 import torch
 import graph_ext
-from sageir import graph
+from sageir import block
 from torch import autograd, overrides
 
 
@@ -35,7 +35,7 @@ class GSPMMFunction(autograd.Function):
         return None, grad_a, grad_x
 
 
-def gspmm(block: graph.Block,
+def gspmm(block: block.Block,
           edge: torch.Tensor,
           x: torch.Tensor):
     return GSPMMFunction.apply(
@@ -73,7 +73,7 @@ class GSDDMMFunction(autograd.Function):
         return None, grad_query, grad_key
 
 
-def fused_gsddmm(block: graph.Block,
+def fused_gsddmm(block: block.Block,
                  query: torch.Tensor,
                  key: torch.Tensor):
     return GSDDMMFunction.apply(

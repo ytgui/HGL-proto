@@ -17,20 +17,21 @@ class Module2IR:
 
         #
         if isinstance(node, sageir.Block):
-            for k, g in kwargs.items():
-                if g != node:
+            for k, v in kwargs.items():
+                if v != node:
                     continue
                 self._tracer2ir[node] = ir.OpGraph(
-                    g, name=k
+                    v, name=k
                 )
                 return self._tracer2ir[node]
             for k, het in kwargs.items():
                 if not isinstance(
-                    het, sageir.HeteroBlock
+                    het, mp.HeteroGraph
                 ):
                     continue
-                for rel, blk in \
+                for rel, homg in \
                         het.hetero_graph.items():
+                    blk = homg.blk
                     if blk != node:
                         continue
                     self._tracer2ir[node] = ir.OpGraph(
@@ -51,7 +52,36 @@ class Module2IR:
                         name=k
                     )
                     return self._tracer2ir[node]
+                for k, v in kwargs.items():
+                    if not isinstance(v, dict):
+                        continue
+                    for entity, t in v.items():
+                        if id(t) != id(node):
+                            continue
+                        self._tracer2ir[node] = ir.OpTensor(
+                            size=node.size(),
+                            name='{}.{}'.format(k, entity)
+                        )
+                        return self._tracer2ir[node]
                 raise RuntimeError
+            elif node.previous_func == 'add':
+                node_a, node_b = node.previous_args
+                self._tracer2ir[node] = ir.OpAdd(
+                    a=self._visit(node_a, kwargs),
+                    b=self._visit(node_b, kwargs)
+                )
+                return self._tracer2ir[node]
+            elif node.previous_func == 'div':
+                node_x, node_a = node.previous_args
+                if not isinstance(node_a, (int,
+                                           float)):
+                    raise NotImplementedError
+                scale = 1.0 / node_a
+                self._tracer2ir[node] = ir.OpScale(
+                    scale=scale,
+                    x=self._visit(node_x, kwargs)
+                )
+                return self._tracer2ir[node]
             elif node.previous_func == 'elu':
                 node_x, = node.previous_args
                 self._tracer2ir[node] = ir.OpELU(
@@ -86,8 +116,7 @@ class Module2IR:
                 node_x, = node.previous_args
                 self._tracer2ir[node] = ir.OpDropout(
                     x=self._visit(node_x, kwargs),
-                    p=node.previous_kwargs['p'],
-                    training=node.previous_kwargs['training']
+                    p=node.previous_kwargs['p']
                 )
                 return self._tracer2ir[node]
             elif node.previous_func == 'leaky_relu':
@@ -145,7 +174,8 @@ class Module2IR:
                 return trace.Tracer(
                     torch.zeros_like(x, device='cpu')
                 ).to(x.device)
-            elif isinstance(x, mp.Graph):
+            elif isinstance(x, (mp.Graph,
+                                mp.HeteroGraph)):
                 return x
             else:
                 raise NotImplementedError

@@ -1,7 +1,7 @@
 import torch
 import sageir
 from torch import overrides
-from sageir import graph
+from sageir import block
 
 
 def message_wrapper(graph, func, **kwargs):
@@ -64,7 +64,7 @@ class Fn:
 
 
 class Graph:
-    def __init__(self, blk: graph.Block):
+    def __init__(self, blk: block.Block):
         self.blk = blk
         self.edge = dict()
         self.src_node = dict()
@@ -125,6 +125,105 @@ class Graph:
             self, desc['func'], **kwargs
         )
 
+    @staticmethod
+    def from_dglgraph(graph):
+        import dgl
+        assert isinstance(
+            graph, dgl.DGLGraph
+        )
+        assert graph.is_homogeneous
+
+        #
+        adj = graph.adj(
+            transpose=True,
+            scipy_fmt='csr'
+        )
+        blk = block.Block(
+            size=[
+                graph.num_nodes(),
+                graph.num_nodes()
+            ],
+            adj=[
+                torch.IntTensor(
+                    adj.indptr
+                ).to(graph.device),
+                torch.IntTensor(
+                    adj.indices
+                ).to(graph.device)
+            ]
+        )
+        return Graph(blk)
+
+
+class HeteroGraph:
+    def __init__(self):
+        self.etypes = []
+        self.nty2num = {}
+        self.idx2rel = {}
+        self.rel2idx = {}
+        self.hetero_graph = {}
+
+    def __iter__(self):
+        return iter(self.hetero_graph.items())
+
+    @staticmethod
+    def from_dglgraph(graph):
+        import dgl
+        assert isinstance(
+            graph, (
+                dgl.DGLGraph,
+                dgl.DGLHeteroGraph
+            )
+        )
+        assert not graph.is_homogeneous
+        hgraph = HeteroGraph()
+        for nty in graph.ntypes:
+            hgraph.nty2num[
+                nty
+            ] = graph.num_nodes(nty)
+        hgraph.etypes = list(
+            graph.etypes
+        )
+        for sty, ety, dty in \
+                graph.canonical_etypes:
+            adj = graph.adj(
+                transpose=True,
+                scipy_fmt='csr',
+                etype=(sty, ety, dty)
+            )
+            blk = block.Block(
+                size=[
+                    graph.num_nodes(dty),
+                    graph.num_nodes(sty)
+                ],
+                adj=[
+                    torch.IntTensor(
+                        adj.indptr
+                    ).to(graph.device),
+                    torch.IntTensor(
+                        adj.indices
+                    ).to(graph.device)
+                ]
+            )
+            hgraph.idx2rel[
+                len(hgraph.idx2rel)
+            ] = [sty, ety, dty]
+            hgraph.rel2idx[
+                sty, ety, dty
+            ] = len(hgraph.rel2idx)
+            hgraph.hetero_graph[
+                sty, ety, dty
+            ] = Graph(blk)
+        return hgraph
+
 
 def from_dglgraph(graph):
-    return Graph(sageir.from_dglgraph(graph))
+    import dgl
+    assert isinstance(
+        graph, (dgl.DGLGraph,
+                dgl.DGLHeteroGraph)
+    )
+    if graph.is_homogeneous:
+        return Graph.from_dglgraph(graph)
+    else:
+        return HeteroGraph.from_dglgraph(graph)
