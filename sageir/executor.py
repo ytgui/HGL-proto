@@ -51,6 +51,13 @@ class Executor:
                     training=self._is_training
                 )
             return self._cache[root_node]
+        elif isinstance(root_node, ir.OpEmbed):    
+            if root_node not in self._cache:
+                self._cache[root_node] = functional.embedding(
+                    child_args['x'],
+                    weight=root_node.ref_params['embed']
+                )
+            return self._cache[root_node]
         elif isinstance(root_node, ir.OpScale):
             if root_node not in self._cache:
                 self._cache[root_node] = torch.multiply(

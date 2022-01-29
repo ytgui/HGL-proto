@@ -87,6 +87,7 @@ def check_homo():
         lr=2e-4, weight_decay=1e-5
     )
 
+    #
     def train():
         executor.train()
         logits = executor.run(
@@ -122,6 +123,7 @@ def check_homo():
             )
             return correct.item() / len(indices)
 
+    #
     for epoch in range(20):
         loss_val = None
         for _ in range(50):

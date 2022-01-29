@@ -61,6 +61,21 @@ class OpMul(OpTensor):
         )
 
 
+class OpEmbed(OpTensor):
+    def __init__(self,
+                 x: torch.Tensor,
+                 embed: nn.Parameter,
+                 name: str = ''):
+        assert len(x.size) == 1
+        OpTensor.__init__(
+            self,
+            size=[x.size[0], embed.size()[1:]],
+            prevs={'x': x},
+            name=name
+        )
+        self.ref_params = {'embed': embed}
+
+
 class OpView(OpTensor):
     def __init__(self,
                  x: OpTensor,

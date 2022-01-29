@@ -3,7 +3,7 @@ import sageir
 from sageir import mp
 from torch import nn, optim
 from dgl.data.rdf import MUTAGDataset
-from common.model import GATLayer, HeteroGraphConv
+from common.model import RGATModel
 from tqdm import tqdm
 
 
@@ -58,20 +58,19 @@ def check_hetero():
     #
     n_heads = 2
     d_hidden = 16
-    model = HeteroGraphConv({
-        ety: GATLayer(
-            in_features=d_hidden,
-            out_features=d_hidden,
-            n_heads=n_heads
-        )
-        for ety in graph.etypes
-    }).to('cuda')
-    features = {
-        nty: torch.randn(size=[
-            graph.nty2num[nty],
-            d_hidden
-        ]).to('cuda')
-        for nty in graph.nty2num
+    model = RGATModel(
+        hgraph=graph,
+        in_features=d_hidden,
+        gnn_features=d_hidden,
+        out_features=d_hidden,
+        n_heads=n_heads
+    ).to('cuda')
+    node_indices = {
+        nty: torch.linspace(
+            0, num - 1, num,
+            dtype=torch.int64
+        ).to('cuda')
+        for nty, num in graph.nty2num.items()
     }
 
     #
@@ -80,7 +79,7 @@ def check_hetero():
     dataflow = mod2ir.transform(
         model, kwargs={
             'hgraph': graph,
-            'xs': features
+            'xs': node_indices
         }
     )
     sageir.Printer().dump(dataflow)
@@ -94,15 +93,64 @@ def check_hetero():
     #
     print('===== executor =====')
     executor = sageir.Executor()
-    logits = executor.run(
-        dataflow[pred_cat],
-        kwargs={
-            'hgraph': graph,
-            'xs': features
-        }
+    loss_fn = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(
+        model.parameters(),
+        lr=1e-3, weight_decay=1e-5
     )
 
-    a = 0
+    #
+    def train():
+        executor.train()
+        logits = executor.run(
+            dataflow[pred_cat],
+            kwargs={
+                'hgraph': graph,
+                'xs': node_indices
+            }
+        )
+        loss = loss_fn(
+            logits[train_mask],
+            target=label[train_mask]
+        )
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        return loss.item()
+
+    def evaluate():
+        executor.eval()
+        with torch.no_grad():
+            logits = executor.run(
+                dataflow[pred_cat],
+                kwargs={
+                    'hgraph': graph,
+                    'xs': node_indices
+                }
+            )
+            assert logits.dim() == 2
+            indices = torch.argmax(
+                logits[test_mask], dim=-1
+            )
+            correct = torch.sum(
+                indices == label[test_mask]
+            )
+            return correct.item() / len(indices)
+
+    #
+    for epoch in range(20):
+        loss_val = None
+        for _ in range(10):
+            loss_val = train()
+        #
+        accuracy = evaluate()
+        print('[epoch={}] loss: {:.04f}, accuracy: {:.02f}'.format(
+            epoch, loss_val, accuracy
+        ))
+        if accuracy > 0.6:
+            break
+    else:
+        raise RuntimeError("not convergent")
 
 
 def test():

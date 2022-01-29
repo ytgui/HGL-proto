@@ -119,6 +119,13 @@ class Module2IR:
                     p=node.previous_kwargs['p']
                 )
                 return self._tracer2ir[node]
+            elif node.previous_func == 'embedding':
+                node_xs = node.previous_args
+                self._tracer2ir[node] = ir.OpEmbed(
+                    x=self._visit(node_xs[0], kwargs),
+                    embed=node_xs[1]
+                )
+                return self._tracer2ir[node]
             elif node.previous_func == 'leaky_relu':
                 node_x, = node.previous_args
                 self._tracer2ir[node] = ir.OpLeakyRelu(
@@ -171,9 +178,10 @@ class Module2IR:
                     process(v) for v in x
                 ]
             elif isinstance(x, torch.Tensor):
+                xty = x.type()
                 return trace.Tracer(
-                    torch.zeros_like(x, device='cpu')
-                ).to(x.device)
+                    torch.zeros(x.size(), device='cpu')
+                ).type(xty).to(x.device)
             elif isinstance(x, (mp.Graph,
                                 mp.HeteroGraph)):
                 return x

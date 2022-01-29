@@ -81,14 +81,16 @@ class GATModel(nn.Module):
 class HeteroGraphConv(nn.Module):
     def __init__(self, convs: dict):
         nn.Module.__init__(self)
-        self._convs = nn.ModuleDict(convs)
+        self.convs = nn.ModuleDict(convs)
 
-    def forward(self, hgraph, xs):
+    def forward(self,
+                hgraph: mp.HeteroGraph,
+                xs: dict):
         counts = {}
         outputs = {}
         for (sty, ety, dty), graph \
                 in hgraph:
-            res = self._convs[ety](
+            res = self.convs[ety](
                 graph, (xs[sty], xs[dty])
             )
             if dty not in counts:
@@ -103,3 +105,73 @@ class HeteroGraphConv(nn.Module):
         for dty, res in outputs.items():
             outputs[dty] = res / counts[dty]
         return outputs
+
+
+class REmbedding(nn.Module):
+    def __init__(self,
+                 hgraph: mp.HeteroGraph,
+                 embedding_dim: int):
+        nn.Module.__init__(self)
+        self.embeds = nn.ModuleDict({
+            nty: nn.Embedding(
+                num, embedding_dim
+            )
+            for nty, num in hgraph.nty2num.items()
+        })
+
+    def forward(self,
+                hgraph: mp.HeteroGraph,
+                xs: dict):
+        return {
+            nty: self.embeds[
+                nty
+            ](xs[nty])
+            for nty in hgraph.nty2num
+        }
+
+
+class RGATModel(nn.Module):
+    def __init__(self,
+                 hgraph: mp.HeteroGraph,
+                 in_features: int,
+                 gnn_features: int,
+                 out_features: int,
+                 n_heads: int):
+        nn.Module.__init__(self)
+        #
+        self.em = REmbedding(
+            hgraph=hgraph,
+            embedding_dim=in_features
+        )
+        self.i2h = HeteroGraphConv({
+            ety: GATLayer(
+                in_features=in_features,
+                out_features=gnn_features,
+                n_heads=n_heads
+            )
+            for ety in hgraph.etypes
+        })
+        self.h2o = HeteroGraphConv({
+            ety: GATLayer(
+                in_features=gnn_features,
+                out_features=out_features,
+                n_heads=n_heads
+            )
+            for ety in hgraph.etypes
+        })
+        self.activation = nn.Sequential(
+            nn.Dropout(0.5),
+            nn.ELU()
+        )
+
+    def forward(self,
+                hgraph: mp.HeteroGraph,
+                xs: dict):
+        xs = self.em(hgraph, xs)
+        hs = self.i2h(hgraph, xs)
+        hs = {
+            k: self.activation(h)
+            for k, h in hs.items()
+        }
+        hs = self.h2o(hgraph, hs)
+        return hs
