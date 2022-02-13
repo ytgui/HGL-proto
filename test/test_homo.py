@@ -9,7 +9,7 @@ from tqdm import tqdm
 
 def dump_data():
     dataset = CoraGraphDataset(
-        verbose=False
+        verbose=True
     )
     dglgraph = dataset[0].to('cuda')
     graph = mp.from_dglgraph(dglgraph)

@@ -10,18 +10,16 @@ class Module2IR:
 
     def _visit(self, node, kwargs: dict):
         #
-        if isinstance(node, mp.Graph):
-            node = node.blk
         if node in self._tracer2ir:
             return self._tracer2ir[node]
 
         #
-        if isinstance(node, sageir.Block):
+        if isinstance(node, mp.Graph):
             for k, v in kwargs.items():
                 if v != node:
                     continue
                 self._tracer2ir[node] = ir.OpGraph(
-                    v, name=k
+                    node.blk, name=k
                 )
                 return self._tracer2ir[node]
             for k, het in kwargs.items():
@@ -32,10 +30,10 @@ class Module2IR:
                 for rel, homg in \
                         het.hetero_graph.items():
                     blk = homg.blk
-                    if blk != node:
+                    if blk != node.blk:
                         continue
                     self._tracer2ir[node] = ir.OpGraph(
-                        blk,
+                        node.blk,
                         name='{}.{}'.format(
                             k, het.rel2idx[rel]
                         )
@@ -191,21 +189,6 @@ class Module2IR:
 
         #
         output = model(**kwargs)
-
-        # replace mp.Graph
-        def post_process(kwargs):
-            post_insert = []
-            post_removal = []
-            for k, v in kwargs.items():
-                if isinstance(v, mp.Graph):
-                    post_removal.append(k)
-                    post_insert.append([k, v.blk])
-            for k in post_removal:
-                del kwargs[k]
-            for k, v in post_insert:
-                kwargs[k] = v
-            return kwargs
-        kwargs = post_process(kwargs)
 
         # transform to ir by tracer
         if isinstance(output, dict):

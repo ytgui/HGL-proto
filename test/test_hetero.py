@@ -2,13 +2,13 @@ import torch
 import sageir
 from sageir import mp
 from torch import nn, optim
-from dgl.data.rdf import MUTAGDataset
+from dgl.data.rdf import AIFBDataset, MUTAGDataset
 from common.model import RGATModel
 from tqdm import tqdm
 
 
 def dump_data():
-    dataset = MUTAGDataset(
+    dataset = AIFBDataset(
         verbose=True
     )
     dglgraph = dataset[0].to('cuda')
@@ -44,8 +44,9 @@ def dump_data():
 
 
 def check_hetero():
+    # dump_data()
     dataset = torch.load(
-        '.data/mutag-hetero.pt'
+        '.data/aifb-hetero.pt'
     )
     graph = dataset['graph']
     label = dataset['label']
@@ -85,7 +86,7 @@ def check_hetero():
     sageir.Printer().dump(dataflow)
 
     #
-    print('===== optimizer =====')
+    print('===== optimize =====')
     optimizer = sageir.Optimizer()
     dataflow = optimizer.lower(dataflow)
     sageir.Printer().dump(dataflow)
