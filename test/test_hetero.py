@@ -8,8 +8,8 @@ from tqdm import tqdm
 
 
 def dump_data():
-    dataset = AIFBDataset(
-        verbose=True
+    dataset = MUTAGDataset(
+        verbose=False
     )
     dglgraph = dataset[0].to('cuda')
     graph = mp.from_dglgraph(dglgraph)
@@ -44,9 +44,9 @@ def dump_data():
 
 
 def check_hetero():
-    # dump_data()
+    dump_data()
     dataset = torch.load(
-        '.data/aifb-hetero.pt'
+        '.data/mutag-hetero.pt'
     )
     graph = dataset['graph']
     label = dataset['label']
@@ -73,23 +73,34 @@ def check_hetero():
         ).to('cuda')
         for nty, num in graph.nty2num.items()
     }
+    kwargs = dict({
+        'hgraph': graph,
+        'xs': node_indices
+    })
 
     #
     print('===== mod2ir =====')
     mod2ir = sageir.Module2IR()
     dataflow = mod2ir.transform(
-        model, kwargs={
-            'hgraph': graph,
-            'xs': node_indices
-        }
+        model, kwargs=kwargs
+    )[pred_cat]
+    sageir.Printer().dump(dataflow)
+
+    #
+    print('===== lower =====')
+    optimizer = sageir.Optimizer()
+    dataflow = optimizer.lower(
+        dataflow, kwargs=kwargs
     )
     sageir.Printer().dump(dataflow)
 
     #
-    print('===== optimize =====')
-    optimizer = sageir.Optimizer()
-    dataflow = optimizer.lower(dataflow)
-    sageir.Printer().dump(dataflow)
+    # print('===== stitch =====')
+    # stitcher = sageir.Stitcher()
+    # dataflow = stitcher.transform(
+    #     dataflow, kwargs=kwargs
+    # )
+    # sageir.Printer().dump(dataflow)
 
     #
     print('===== executor =====')
@@ -104,11 +115,8 @@ def check_hetero():
     def train():
         executor.train()
         logits = executor.run(
-            dataflow[pred_cat],
-            kwargs={
-                'hgraph': graph,
-                'xs': node_indices
-            }
+            dataflow,
+            kwargs=kwargs
         )
         loss = loss_fn(
             logits[train_mask],
@@ -123,7 +131,7 @@ def check_hetero():
         executor.eval()
         with torch.no_grad():
             logits = executor.run(
-                dataflow[pred_cat],
+                dataflow,
                 kwargs={
                     'hgraph': graph,
                     'xs': node_indices

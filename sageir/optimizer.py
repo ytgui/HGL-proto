@@ -29,11 +29,12 @@ class Optimizer:
             if not isinstance(edge_node,
                               ir.OpFusedSDDMM):
                 raise NotImplementedError
-            root_node = ir.OpGSPMM(
+            root_node = ir.OpSPMM(
                 graph=graph_node,
                 edge=edge_node, x=x_node
             )
 
+        #
         return root_node
 
     def _lower_sddmm(self, root_node: ir.Op):
@@ -67,9 +68,10 @@ class Optimizer:
             else:
                 raise NotImplementedError
 
+        #
         return root_node
 
-    def lower(self, dataflow: ir.Op):
+    def lower(self, dataflow, kwargs: dict):
         if isinstance(dataflow, dict):
             dataflow = {
                 k: self._lower_spmm(

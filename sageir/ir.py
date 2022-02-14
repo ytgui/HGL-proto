@@ -120,6 +120,26 @@ class OpScale(OpTensor):
         self.val_params['scale'] = scale
 
 
+class OpConcat(OpTensor):
+    def __init__(self,
+                 xs: List[OpTensor],
+                 dim: int,
+                 name: str = ''):
+        if dim != 0:
+            raise NotImplementedError
+        size = xs[0].size
+        for x in xs[1:]:
+            size[0] += x.size[0]
+            assert size[1:] == x.size[1:]
+        OpTensor.__init__(
+            self,
+            size=size,
+            prevs={'x': x},
+            name=name
+        )
+        self.val_params['dim'] = dim
+
+
 class OpLinear(OpTensor):
     def __init__(self,
                  x: OpTensor,
@@ -149,7 +169,7 @@ class OpDropout(OpTensor):
         self.val_params = {'p': p}
 
 
-class OpGSPMM(OpTensor):
+class OpSPMM(OpTensor):
     def __init__(self,
                  graph: OpGraph,
                  edge: OpTensor,

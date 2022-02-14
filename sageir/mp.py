@@ -157,6 +157,7 @@ class Graph:
 
 class HeteroGraph:
     def __init__(self):
+        self.device = None
         self.etypes = []
         self.nty2num = {}
         self.idx2rel = {}
@@ -177,6 +178,7 @@ class HeteroGraph:
         )
         assert not graph.is_homogeneous
         hgraph = HeteroGraph()
+        hgraph.device = graph.device
         for nty in graph.ntypes:
             hgraph.nty2num[
                 nty

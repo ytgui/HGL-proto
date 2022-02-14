@@ -19,7 +19,7 @@ class Executor:
             k: self._execute(v, kwargs)
             for k, v in root_node.prevs.items()
         }
-        if isinstance(root_node, ir.OpGSPMM):
+        if isinstance(root_node, ir.OpSPMM):
             if root_node not in self._cache:
                 self._cache[root_node] = sparse.gspmm(
                     block=child_args['g'],
