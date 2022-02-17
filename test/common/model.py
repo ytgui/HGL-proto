@@ -4,12 +4,63 @@ from sageir import mp
 from typing import Union
 
 
+class GCNLayer(nn.Module):
+    def __init__(self,
+                 in_features: int,
+                 out_features: int):
+        nn.Module.__init__(self)
+        #
+        self.fc = nn.Linear(in_features, out_features)
+
+    def forward(self,
+                graph: mp.Graph,
+                norm: torch.Tensor,
+                x: Union[torch.Tensor, list]):
+        h = self.fc(x)
+        h = h.view(size=[
+            -1, 1, h.size(-1)
+        ])
+        graph.src_node['u'] = h
+        graph.message_func(mp.Fn.copy_u('u', 'm'))
+        graph.reduce_func(mp.Fn.aggregate_sum('m', 'v'))
+        h = torch.squeeze(graph.dst_node['v'], dim=1)
+        return torch.multiply(norm, h)
+
+
+class GCNModel(nn.Module):
+    def __init__(self,
+                 in_features: int,
+                 gnn_features: int,
+                 out_features: int):
+        nn.Module.__init__(self)
+        #
+        self.i2h = GCNLayer(
+            in_features, gnn_features
+        )
+        self.h2o = GCNLayer(
+            gnn_features, out_features
+        )
+        self.activation = nn.Sequential(
+            nn.Dropout(0.5),
+            nn.ReLU(),
+        )
+
+    def forward(self,
+                graph: mp.Graph,
+                x: torch.Tensor,
+                norm: torch.Tensor):
+        h = self.i2h(graph, norm, x)
+        h = self.activation(h)
+        h = self.h2o(graph, norm, h)
+        return h
+
+
 class GATLayer(nn.Module):
     def __init__(self,
                  in_features: int,
                  out_features: int,
                  n_heads: int):
-        super().__init__()
+        nn.Module.__init__(self)
         #
         self.n_heads = n_heads
         self.n_features = out_features
@@ -57,7 +108,7 @@ class GATModel(nn.Module):
                  in_features: int,
                  gnn_features: int,
                  out_features: int,
-                 n_heads: int):
+                 n_heads: int = 8):
         nn.Module.__init__(self)
         #
         self.i2h = GATLayer(

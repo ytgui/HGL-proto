@@ -86,6 +86,12 @@ class Module2IR:
                     x=self._visit(node_x, kwargs)
                 )
                 return self._tracer2ir[node]
+            elif node.previous_func == 'relu':
+                node_x, = node.previous_args
+                self._tracer2ir[node] = ir.OpRelu(
+                    x=self._visit(node_x, kwargs)
+                )
+                return self._tracer2ir[node]
             elif node.previous_func == 'view':
                 node_x, = node.previous_args
                 self._tracer2ir[node] = ir.OpView(
@@ -115,6 +121,20 @@ class Module2IR:
                 self._tracer2ir[node] = ir.OpDropout(
                     x=self._visit(node_x, kwargs),
                     p=node.previous_kwargs['p']
+                )
+                return self._tracer2ir[node]
+            elif node.previous_func == 'squeeze':
+                node_x, = node.previous_args
+                self._tracer2ir[node] = ir.OpSqueeze(
+                    x=self._visit(node_x, kwargs),
+                    dim=node.previous_kwargs['dim']
+                )
+                return self._tracer2ir[node]
+            elif node.previous_func == 'multiply':
+                node_a, node_b = node.previous_args
+                self._tracer2ir[node] = ir.OpMultiply(
+                    a=self._visit(node_a, kwargs),
+                    b=self._visit(node_b, kwargs),
                 )
                 return self._tracer2ir[node]
             elif node.previous_func == 'embedding':

@@ -60,22 +60,25 @@ def check_homo():
         out_features=n_labels,
         n_heads=n_heads,
     ).to('cuda')
+    kwargs = dict({
+        'graph': graph,
+        'x': feature
+    })
 
     #
     print('===== mod2ir =====')
     mod2ir = sageir.Module2IR()
     dataflow = mod2ir.transform(
-        model, kwargs={
-            'graph': graph,
-            'x': feature
-        }
+        model, kwargs=kwargs
     )
     sageir.Printer().dump(dataflow)
 
     #
     print('===== optimizer =====')
     optimizer = sageir.Optimizer()
-    dataflow = optimizer.lower(dataflow)
+    dataflow = optimizer.lower(
+        dataflow, kwargs=kwargs
+    )
     sageir.Printer().dump(dataflow)
 
     #
@@ -91,10 +94,7 @@ def check_homo():
     def train():
         executor.train()
         logits = executor.run(
-            dataflow, kwargs={
-                'graph': graph,
-                'x': feature
-            }
+            dataflow, kwargs=kwargs
         )
         loss = loss_fn(
             logits[train_mask],

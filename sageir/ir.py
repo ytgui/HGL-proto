@@ -48,19 +48,6 @@ class OpAdd(OpTensor):
         )
 
 
-class OpMul(OpTensor):
-    def __init__(self,
-                 a: float,
-                 b: OpTensor,
-                 name: str = ''):
-        OpTensor.__init__(
-            self,
-            size=b.size,
-            prevs={'a': a, 'b': b},
-            name=name
-        )
-
-
 class OpEmbed(OpTensor):
     def __init__(self,
                  x: torch.Tensor,
@@ -140,6 +127,38 @@ class OpConcat(OpTensor):
         self.val_params['dim'] = dim
 
 
+class OpSqueeze(OpTensor):
+    def __init__(self,
+                 x: OpTensor,
+                 dim: int,
+                 name: str = ''):
+        if dim == -1:
+            raise NotImplementedError
+        OpTensor.__init__(
+            self,
+            size=x.size[:dim] + x.size[dim+1:],
+            prevs={'x': x},
+            name=name
+        )
+        self.val_params['dim'] = dim
+
+
+class OpMultiply(OpTensor):
+    def __init__(self,
+                 a: OpTensor,
+                 b: OpTensor,
+                 name: str = ''):
+        assert len(a.size) == len(b.size)
+        OpTensor.__init__(
+            self,
+            size=[max(a, b)
+                  for a, b in
+                  zip(a.size, b.size)],
+            prevs={'a': a, 'b': b},
+            name=name
+        )
+
+
 class OpLinear(OpTensor):
     def __init__(self,
                  x: OpTensor,
@@ -169,20 +188,28 @@ class OpDropout(OpTensor):
         self.val_params = {'p': p}
 
 
-class OpSPMM(OpTensor):
+class OpFusedSPMM(OpTensor):
     def __init__(self,
                  graph: OpGraph,
                  edge: OpTensor,
                  x: OpTensor,
                  name: str = ''):
-        assert len(edge.size) == 2
         assert len(x.size) == 3
-        OpTensor.__init__(
-            self,
-            size=x.size,
-            prevs={'g': graph, 'e': edge, 'x': x},
-            name=name
-        )
+        if edge is None:
+            OpTensor.__init__(
+                self,
+                size=x.size,
+                prevs={'g': graph, 'x': x},
+                name=name
+            )
+        else:
+            assert len(edge.size) == 2
+            OpTensor.__init__(
+                self,
+                size=x.size,
+                prevs={'g': graph, 'e': edge, 'x': x},
+                name=name
+            )
 
 
 class OpFusedSDDMM(OpGraph):
@@ -209,6 +236,18 @@ class OpFusedSDDMM(OpGraph):
 
 
 class OpELU(OpTensor):
+    def __init__(self,
+                 x: OpTensor,
+                 name: str = ''):
+        OpTensor.__init__(
+            self,
+            size=x.size,
+            prevs={'x': x},
+            name=name
+        )
+
+
+class OpRelu(OpTensor):
     def __init__(self,
                  x: OpTensor,
                  name: str = ''):

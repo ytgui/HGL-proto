@@ -7,7 +7,7 @@ from sageir import block
 def message_wrapper(graph, func, **kwargs):
     n_heads = None
     for v in kwargs.values():
-        assert v.dim() in [2, 3]
+        assert v.dim() == 3
         if not n_heads:
             n_heads = v.size(1)
         assert n_heads == v.size(1)
@@ -20,7 +20,7 @@ def message_wrapper(graph, func, **kwargs):
 def reduce_wrapper(graph, func, **kwargs):
     n_heads = None
     for v in kwargs.values():
-        assert v.dim() in [2]
+        assert v.dim() == 2
         if not n_heads:
             n_heads = v.size(1)
         assert n_heads == v.size(1)
@@ -30,6 +30,14 @@ def reduce_wrapper(graph, func, **kwargs):
 
 
 class Fn:
+    @classmethod
+    def copy_u(cls, u, e):
+        desc = {
+            'func': 'copy_u',
+            'u': u, 'out': e
+        }
+        return desc
+
     @classmethod
     def u_add_v(cls, u, v, e):
         desc = {
@@ -96,6 +104,9 @@ class Graph:
         assert n_features
         return n_features
 
+    def right_norm(self):
+        return self.blk.right_norm
+
     def _build_kwargs(self, desc: dict):
         kwargs = {}
         for k, v in desc.items():
@@ -150,7 +161,10 @@ class Graph:
                 torch.IntTensor(
                     adj.indices
                 ).to(graph.device)
-            ]
+            ],
+            right_norm=torch.div(
+                1.0, graph.in_degrees()
+            ).unsqueeze(-1)
         )
         return Graph(blk)
 

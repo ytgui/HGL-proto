@@ -38,6 +38,12 @@ class GSPMMFunction(autograd.Function):
 def gspmm(block: block.Block,
           edge: torch.Tensor,
           x: torch.Tensor):
+    indices = block.adj_sparse[1]
+    if edge is None:
+        edge = torch.ones(
+            size=[indices.size(0), 1],
+            device=x.device
+        )
     return GSPMMFunction.apply(
         block.adj_sparse, edge, x
     )

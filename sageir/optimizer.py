@@ -21,15 +21,20 @@ class Optimizer:
                 raise NotImplementedError
             aggre_node = root_node.prevs['e']
         if isinstance(aggre_node, ir.OpEdgeFunc):
-            if aggre_node.func_name != 'u_mul_e':
+            if aggre_node.func_name == 'copy_u':
+                edge_node = None
+                x_node = aggre_node.prevs['u']
+                graph_node = aggre_node.prevs['g']
+            elif aggre_node.func_name != 'u_mul_e':
+                x_node = aggre_node.prevs['u']
+                edge_node = aggre_node.prevs['e']
+                graph_node = edge_node.prevs['g']
+                if not isinstance(edge_node,
+                                ir.OpFusedSDDMM):
+                    raise NotImplementedError
+            else:
                 raise NotImplementedError
-            x_node = aggre_node.prevs['u']
-            edge_node = aggre_node.prevs['e']
-            graph_node = edge_node.prevs['g']
-            if not isinstance(edge_node,
-                              ir.OpFusedSDDMM):
-                raise NotImplementedError
-            root_node = ir.OpSPMM(
+            root_node = ir.OpFusedSPMM(
                 graph=graph_node,
                 edge=edge_node, x=x_node
             )

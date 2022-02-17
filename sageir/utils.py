@@ -1,3 +1,4 @@
+import time
 import torch
 import pstats
 import cProfile
@@ -31,8 +32,10 @@ class Profiler:
         self._profiler = cProfile.Profile()
 
     def __enter__(self):
+        self._timing = time.time()
         self._before = torch.cuda.memory_stats()
         self._profiler.enable()
+        return self
 
     def __exit__(self, exc_type, exc_value, traceback):
         assert not exc_value
@@ -45,7 +48,10 @@ class Profiler:
         pstats.Stats(self._profiler) \
             .strip_dirs() \
             .sort_stats(pstats.SortKey.TIME) \
-            .print_stats(20)
+            .print_stats(10)
+
+    def timing(self):
+        return time.time() - self._timing
 
     def _cuda_stats(self, before: dict, after: dict):
         res = {}

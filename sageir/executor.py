@@ -19,12 +19,15 @@ class Executor:
             k: self._execute(v, kwargs)
             for k, v in root_node.prevs.items()
         }
-        if isinstance(root_node, ir.OpSPMM):
+        if isinstance(root_node, ir.OpFusedSPMM):
             if root_node not in self._cache:
+                if 'e' not in child_args:
+                    edge = None
+                else:
+                    edge = child_args['e']
                 self._cache[root_node] = sparse.gspmm(
                     block=child_args['g'],
-                    edge=child_args['e'],
-                    x=child_args['x']
+                    edge=edge, x=child_args['x']
                 )
             return self._cache[root_node]
         elif isinstance(root_node, ir.OpFusedSDDMM):
@@ -49,6 +52,19 @@ class Executor:
                     child_args['x'],
                     p=root_node.val_params['p'],
                     training=self._is_training
+                )
+            return self._cache[root_node]
+        elif isinstance(root_node, ir.OpSqueeze):
+            if root_node not in self._cache:
+                self._cache[root_node] = torch.squeeze(
+                    child_args['x'],
+                    dim=root_node.val_params['dim'],
+                )
+            return self._cache[root_node]
+        elif isinstance(root_node, ir.OpMultiply):
+            if root_node not in self._cache:
+                self._cache[root_node] = torch.multiply(
+                    child_args['a'], child_args['b'],
                 )
             return self._cache[root_node]
         elif isinstance(root_node, ir.OpEmbed):    
@@ -76,6 +92,12 @@ class Executor:
             if root_node not in self._cache:
                 self._cache[root_node] = child_args['x'].view(
                     size=root_node.size
+                )
+            return self._cache[root_node]
+        elif isinstance(root_node, ir.OpRelu):
+            if root_node not in self._cache:
+                self._cache[root_node] = torch.relu(
+                    child_args['x']
                 )
             return self._cache[root_node]
         elif isinstance(root_node, ir.OpELU):

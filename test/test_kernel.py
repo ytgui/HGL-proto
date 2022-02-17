@@ -176,7 +176,7 @@ def check_gsddmm():
 
 
 def test():
-    for _ in tqdm(range(256)):
+    for _ in tqdm(range(16)):
         check_gspmm()
         check_gsddmm()
 

@@ -2,9 +2,10 @@ import torch
 
 
 class Block:
-    def __init__(self, size:list, adj: list):
+    def __init__(self, size:list, adj: list, right_norm=None):
         self.size = size
         self.adj_sparse = adj
+        self.right_norm = right_norm
 
     def num_edges(self):
         indices = self.adj_sparse[1]
