@@ -1,10 +1,11 @@
 import torch
 import sageir
-import dgl as dgl
+from torch import nn
 from sageir import mp
 from dgl import nn as dglnn
 from dgl.data import CoraGraphDataset
 from common.model import GCNLayer
+from tqdm import tqdm
 
 
 def check_gcn():
@@ -70,7 +71,8 @@ def check_gcn():
 
 
 def test():
-    check_gcn()
+    for _ in tqdm(range(16)):
+        check_gcn()
 
 
 if __name__ == "__main__":

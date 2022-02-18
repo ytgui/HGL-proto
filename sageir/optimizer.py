@@ -25,12 +25,12 @@ class Optimizer:
                 edge_node = None
                 x_node = aggre_node.prevs['u']
                 graph_node = aggre_node.prevs['g']
-            elif aggre_node.func_name != 'u_mul_e':
+            elif aggre_node.func_name == 'u_mul_e':
                 x_node = aggre_node.prevs['u']
                 edge_node = aggre_node.prevs['e']
                 graph_node = edge_node.prevs['g']
                 if not isinstance(edge_node,
-                                ir.OpFusedSDDMM):
+                                  ir.OpFusedSDDMM):
                     raise NotImplementedError
             else:
                 raise NotImplementedError
@@ -76,6 +76,22 @@ class Optimizer:
         #
         return root_node
 
+    def _bundle_gemm(self, root_node: ir.Op):
+        # recursive
+        for name in root_node.prevs:
+            child = root_node.prevs[name]
+            child = self._bundle_gemm(child)
+            root_node.prevs[name] = child
+
+        # transform
+        query_node, key_node = None, None
+        if isinstance(root_node, ir.OpFusedSDDMM):
+            key_node = root_node.prevs['k']
+            query_node = root_node.prevs['q']
+
+        #
+        return root_node
+
     def lower(self, dataflow, kwargs: dict):
         if isinstance(dataflow, dict):
             dataflow = {
@@ -87,6 +103,9 @@ class Optimizer:
         elif isinstance(dataflow, ir.Op):
             dataflow = self._lower_spmm(
                 self._lower_sddmm(dataflow)
+            )
+            dataflow = self._bundle_gemm(
+                dataflow
             )
         else:
             raise NotImplementedError

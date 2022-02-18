@@ -57,9 +57,15 @@ class DGLGATModel(nn.Module):
         )
 
     def forward(self, block, x):
-        x = self.i2h(block, x)
+        x = torch.mean(
+            self.i2h(block, x),
+            dim=1
+        )
         x = self.activation(x)
-        x = self.h2o(block, x)
+        x = torch.mean(
+            self.h2o(block, x),
+            dim=1
+        )
         return x
 
 
@@ -113,6 +119,9 @@ def bench_dgl_homo(dataset, model, d_hidden):
     feature = torch.randn(
         size=[n_nodes, n_features]
     ).to('cuda')
+    gradient = torch.ones(
+        [n_nodes, n_labels]
+    ).to('cuda')
     model = model(
         in_features=n_features,
         gnn_features=d_hidden,
@@ -121,26 +130,31 @@ def bench_dgl_homo(dataset, model, d_hidden):
 
     # prewarm
     y = model(graph, feature)
-    torch.sum(y).backward()
+    y.backward(gradient=gradient)
+    torch.cuda.synchronize()
 
     # forward
+    """
     timing = None
     time.sleep(2.0)
     print('[FORWARD]')
     with utils.Profiler() as prof:
         for _ in range(n_epochs):
             model(graph, feature)
+        torch.cuda.synchronize()
         timing = prof.timing() / n_epochs
     print('throughput: {:.1f}'.format(n_nodes / timing))
+    """
 
     # training
     timing = None
     time.sleep(2.0)
     print('[TRAINING]')
-    with utils.Profiler():
+    with utils.Profiler() as prof:
         for _ in range(n_epochs):
             y = model(graph, feature)
-            torch.sum(y).backward()
+            y.backward(gradient=gradient)
+        torch.cuda.synchronize()
         timing = prof.timing() / n_epochs
     print('throughput: {:.1f}'.format(n_nodes / timing))
 
@@ -167,15 +181,19 @@ def bench_sageir_homo(dataset, model, d_hidden):
     feature = torch.randn(
         size=[n_nodes, n_features]
     ).to('cuda')
+    gradient = torch.ones(
+        [n_nodes, n_labels]
+    ).to('cuda')
     model = model(
         in_features=n_features,
         gnn_features=d_hidden,
         out_features=n_labels
     ).to('cuda')
     kwargs = dict({
-        'graph': graph, 'x': feature,
-        'norm': graph.right_norm()
+        'graph': graph, 'x': feature
     })
+    if isinstance(model, MyGCNModel):
+        kwargs['norm'] = graph.right_norm()
 
     # optimizer
     mod2ir = sageir.Module2IR()
@@ -193,9 +211,11 @@ def bench_sageir_homo(dataset, model, d_hidden):
     y = executor.run(
         dataflow, kwargs=kwargs
     )
-    torch.sum(y).backward()
+    y.backward(gradient=gradient)
+    torch.cuda.synchronize()
 
     # forward
+    """
     timing = None
     time.sleep(2.0)
     print('[FORWARD]')
@@ -204,19 +224,22 @@ def bench_sageir_homo(dataset, model, d_hidden):
             executor.run(
                 dataflow, kwargs=kwargs
             )
+        torch.cuda.synchronize()
         timing = prof.timing() / n_epochs
     print('throughput: {:.1f}'.format(n_nodes / timing))
+    """
 
     # training
     timing = None
     time.sleep(2.0)
     print('[TRAINING]')
-    with utils.Profiler():
+    with utils.Profiler() as prof:
         for _ in range(n_epochs):
             y = executor.run(
                 dataflow, kwargs=kwargs
             )
-            torch.sum(y).backward()
+            y.backward(gradient=gradient)
+        torch.cuda.synchronize()
         timing = prof.timing() / n_epochs
     print('throughput: {:.1f}'.format(n_nodes / timing))
 
@@ -236,21 +259,25 @@ def main():
         )
         check_dataset(dataset)
         for dgl_model, sageir_model in [
+            (DGLGATModel, MyGATModel),
             (DGLGCNModel, MyGCNModel),
-            (DGLGATModel, MyGATModel)
         ]:
-            for d_hidden in [16, 32, 64]:
+            for d_hidden in [16]:
+                # """
                 bench_dgl_homo(
                     dataset=dataset,
                     model=dgl_model, d_hidden=d_hidden,
                 )
                 time.sleep(2.0)
-                #
+                # """
                 bench_sageir_homo(
                     dataset=dataset,
                     model=sageir_model, d_hidden=d_hidden,
                 )
                 time.sleep(2.0)
+                # """
+                return
+        a = 0
 
 
 if __name__ == "__main__":

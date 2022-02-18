@@ -43,12 +43,14 @@ class Profiler:
         stats = self._cuda_stats(
             self._before, torch.cuda.memory_stats()
         )
+        # """
         for name, value in stats.items():
             print('{}: {}'.format(name, value))
         pstats.Stats(self._profiler) \
             .strip_dirs() \
             .sort_stats(pstats.SortKey.TIME) \
             .print_stats(10)
+        # """
 
     def timing(self):
         return time.time() - self._timing

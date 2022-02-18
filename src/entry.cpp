@@ -1,5 +1,15 @@
 #include "common.h"
 
+std::vector<torch::Tensor> _b2gemm_cuda(const torch::Tensor &x,
+                                        const torch::Tensor &w_a,
+                                        const torch::Tensor &w_b);
+
+std::vector<torch::Tensor> _b2gemm_backward_cuda(const torch::Tensor &x,
+                                                 const torch::Tensor &w_a,
+                                                 const torch::Tensor &w_b,
+                                                 const torch::Tensor &grad_a,
+                                                 const torch::Tensor &grad_b);
+
 torch::Tensor _spmm_forward_cuda(const torch::Tensor &values,
                                  const torch::Tensor &indptr,
                                  const torch::Tensor &indices,
@@ -22,6 +32,30 @@ std::vector<torch::Tensor> _sddmm_backward_cuda(const torch::Tensor &indptr,
                                                 const torch::Tensor &key,
                                                 const torch::Tensor &attn_values,
                                                 const torch::Tensor &grad_out);
+
+auto b2gemm(const torch::Tensor &x,
+            const torch::Tensor &w_a,
+            const torch::Tensor &w_b) {
+    CHECK_INPUT(x, torch::kFloat32);
+    CHECK_INPUT(w_a, torch::kFloat32);
+    CHECK_INPUT(w_b, torch::kFloat32);
+
+    return _b2gemm_cuda(x, w_a, w_b);
+}
+
+auto b2gemm_backward(const torch::Tensor &x,
+                     const torch::Tensor &w_a,
+                     const torch::Tensor &w_b,
+                     const torch::Tensor &grad_a,
+                     const torch::Tensor &grad_b) {
+    CHECK_INPUT(x, torch::kFloat32);
+    CHECK_INPUT(w_a, torch::kFloat32);
+    CHECK_INPUT(w_b, torch::kFloat32);
+    CHECK_INPUT(grad_a, torch::kFloat32);
+    CHECK_INPUT(grad_b, torch::kFloat32);
+
+    return _b2gemm_backward_cuda(x, w_a, w_b, grad_a, grad_b);
+}
 
 auto spmm_forward(const torch::Tensor &values,
                   const torch::Tensor &indptr,
@@ -78,6 +112,8 @@ auto sddmm_backward(const torch::Tensor &indptr,
 }
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
+    m.def("b2gemm", &b2gemm, "B2GEMM forward (CUDA)");
+    m.def("b2gemm_backward", &b2gemm_backward, "backward (CUDA)");
     m.def("spmm_forward", &spmm_forward, "SPMM forward (CUDA)");
     m.def("spmm_backward", &spmm_backward, "SPMM backward (CUDA)");
     m.def("sddmm_forward", &sddmm_forward, "SDDMM forward (CUDA)");

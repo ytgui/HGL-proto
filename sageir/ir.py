@@ -10,8 +10,8 @@ class Op:
             raise RuntimeError('base class should be inherited')
         self.name = name
         self.size = None
+        self.next = []
         self.prevs = prevs
-        self.next = None
         self.ref_params = {}
         self.val_params = {}
 
@@ -31,7 +31,7 @@ class OpTensor(Op):
             return
         assert isinstance(prevs, dict)
         for n in prevs.values():
-            n.next = self
+            n.next.append(self)
 
 
 class OpAdd(OpTensor):

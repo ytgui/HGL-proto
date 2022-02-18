@@ -1,7 +1,7 @@
 import torch
 import graph_ext
 from sageir import block
-from torch import autograd, overrides
+from torch import autograd
 
 
 class GSPMMFunction(autograd.Function):

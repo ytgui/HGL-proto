@@ -1,5 +1,6 @@
 from sageir import mp
 from sageir import ir
+from sageir import bundle
 from sageir import sparse
 from sageir import convert
 from sageir.block import Block

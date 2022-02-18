@@ -32,9 +32,9 @@ __global__ void _spmm_backward_kernel(
                 for (index_t i = indptr[row]; i < indptr[row + 1]; i += 1) {
                     index_t col = indices[i];
                     atomicAdd(&grad_a[i * n_heads + h],
-                              features[col * n_heads * n_features + h * n_features + k] * grad_row);
+                              grad_row * features[col * n_heads * n_features + h * n_features + k]);
                     atomicAdd(&grad_x[col * n_heads * n_features + h * n_features + k],
-                              values[i * n_heads + h] * grad_row);
+                              grad_row * values[i * n_heads + h]);
                 }
             }
         }
@@ -54,7 +54,7 @@ torch::Tensor _spmm_forward_cuda(const torch::Tensor &values,
     int32_t n_features = features.size(2);
     auto output = torch::zeros({n_nodes, n_heads, n_features}, features.options());
 
-    _spmm_forward_kernel<int32_t, float><<<dim3(n_nodes, n_heads), min(32, n_features)>>>(
+    _spmm_forward_kernel<int32_t, float><<<dim3(n_heads, n_nodes), min(32, n_features)>>>(
         n_nodes, n_heads, n_features, values.data_ptr<float>(), indptr.data_ptr<int32_t>(),
         indices.data_ptr<int32_t>(), features.data_ptr<float>(), output.data_ptr<float>());
 
@@ -77,7 +77,7 @@ std::vector<torch::Tensor> _spmm_backward_cuda(const torch::Tensor &values,
     auto grad_a = torch::zeros_like(values);
     auto grad_x = torch::zeros_like(features);
 
-    _spmm_backward_kernel<int32_t, float><<<dim3(n_nodes, n_heads), min(32, n_features)>>>(
+    _spmm_backward_kernel<int32_t, float><<<dim3(n_heads, n_nodes), min(32, n_features)>>>(
         n_nodes, n_heads, n_features, values.data_ptr<float>(), indptr.data_ptr<int32_t>(),
         indices.data_ptr<int32_t>(), features.data_ptr<float>(), grad_out.data_ptr<float>(),
         grad_a.data_ptr<float>(), grad_x.data_ptr<float>());

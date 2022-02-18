@@ -7,7 +7,7 @@ from sageir import block
 def message_wrapper(graph, func, **kwargs):
     n_heads = None
     for v in kwargs.values():
-        assert v.dim() == 3
+        assert v.dim() in [2, 3]
         if not n_heads:
             n_heads = v.size(1)
         assert n_heads == v.size(1)

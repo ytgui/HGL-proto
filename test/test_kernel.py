@@ -1,7 +1,7 @@
 import torch
 import random
 from torch import nn
-from sageir import sparse, convert
+from sageir import sparse, bundle, convert
 from tqdm import tqdm
 
 
@@ -23,7 +23,9 @@ def check_gspmm():
         )
         if adj_adjacency.max() != 0.0:
             break
-    indptr, indices = convert.to_csr(adj_adjacency)
+    indptr, indices = convert.to_csr(
+        adj_adjacency
+    )[0]
 
     #
     x = torch.randn(
@@ -99,7 +101,9 @@ def check_gsddmm():
         )
         if adj_adjacency.max() != 0.0:
             break
-    indptr, indices = convert.to_csr(adj_adjacency)
+    indptr, indices = convert.to_csr(
+        adj_adjacency
+    )[0]
 
     #
     x_dst = torch.randn(
@@ -175,10 +179,67 @@ def check_gsddmm():
     )
 
 
+def check_gemm():
+    n_nodes = random.randint(1, 2048)
+    n_features = random.randint(1, 128)
+    x = torch.randn(
+        [n_nodes, n_features]
+    ).to('cuda')
+    x.requires_grad = True
+
+    #
+    d_hidden = random.randint(1, 32)
+    fc_1 = nn.Linear(
+        n_features, d_hidden, bias=False
+    ).to('cuda')
+    fc_2 = nn.Linear(
+        n_features, d_hidden, bias=False
+    ).to('cuda')
+    torch.cuda.synchronize()
+
+    #
+    import time
+    before = time.time()
+    y_1, y_2 = fc_1(x), fc_2(x)
+    torch.sum(y_1 + y_2).backward()
+    grad_x_1 = x.grad.clone()
+    grad_fc_1 = fc_1.weight.grad.clone()
+    grad_fc_2 = fc_2.weight.grad.clone()
+    torch.cuda.synchronize()
+    t_1 = time.time() - before
+
+    #
+    x.grad.zero_()
+    fc_1.zero_grad()
+    fc_2.zero_grad()
+    before = time.time()
+    y_3, y_4 = bundle.GEMMBundleFunction.apply(
+        x, fc_1.weight, fc_2.weight,
+        fc_1.bias, fc_2.bias
+    )
+    torch.sum(y_3 + y_4).backward()
+    grad_x_2 = x.grad.clone()
+    grad_fc_3 = fc_1.weight.grad.clone()
+    grad_fc_4 = fc_2.weight.grad.clone()
+    torch.cuda.synchronize()
+    t_2 = time.time() - before
+    # print('{:.2f}'.format(t_1 / t_2))
+
+    #
+    assert torch.allclose(y_1, y_3, atol=1e-3)
+    assert torch.allclose(y_2, y_4, atol=1e-3)
+    assert torch.allclose(grad_fc_1, grad_fc_3, atol=1e-3)
+    assert torch.allclose(grad_fc_2, grad_fc_4, atol=1e-3)
+    assert torch.allclose(grad_x_1, grad_x_2, atol=1e-3)
+
+    return
+
+
 def test():
-    for _ in tqdm(range(16)):
-        check_gspmm()
-        check_gsddmm()
+    for _ in tqdm(range(65536)):
+        # check_gspmm()
+        # check_gsddmm()
+        check_gemm()
 
 
 if __name__ == "__main__":

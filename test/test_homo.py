@@ -134,14 +134,17 @@ def check_homo():
             epoch, loss_val, accuracy
         ))
         if accuracy > 0.72:
-            break
-    else:
-        raise RuntimeError("not convergent")
+            return True
+
+    return False
 
 
 def test():
     for _ in tqdm(range(10)):
-        check_homo()
+        if check_homo():
+            break
+    else:
+        raise RuntimeError("not convergent")
 
 
 if __name__ == "__main__":

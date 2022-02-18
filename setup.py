@@ -44,6 +44,7 @@ setup(
             'graph_ext',
             sources=[
                 'src/entry.cpp',
+                'src/fc_cuda.cu',
                 'src/spmm_cuda.cu',
                 'src/sddmm_cuda.cu',
             ],

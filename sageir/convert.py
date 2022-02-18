@@ -32,13 +32,36 @@ def to_dense_mha(n_rows, n_cols, sparse, values):
 def to_csr(dense):
     assert dense.dim() == 2
     n_rows = dense.size(0)
+    values = []
     indptr, indices = [], []
     for row in range(n_rows):
         indptr.append(len(indices))
         for col in torch.nonzero(dense[row]):
+            values.append(dense[row, col].item())
             indices.append(col.item())
     indptr.append(len(indices))
     #
     indptr = torch.IntTensor(indptr)
     indices = torch.IntTensor(indices)
-    return indptr, indices
+    values = torch.FloatTensor(values)
+    return [indptr, indices], values
+
+
+def transpose(n_rows, n_cols, sparse, values):
+    assert values.dim() == 1
+    dense = to_dense(
+        n_rows, n_cols, sparse, values
+    )
+    return to_csr(dense)[-1]
+
+
+def transpose_mha(n_rows, n_cols, sparse, values):
+    assert values.dim() == 2
+    rev_values = []
+    for h in range(values.size(-1)):
+        dense = to_dense(
+            n_rows, n_cols, sparse, values[:, h]
+        ).T.contiguous()
+        rev_values.append(to_csr(dense)[-1])
+    rev_values = torch.stack(rev_values)
+    return rev_values.T.contiguous()
