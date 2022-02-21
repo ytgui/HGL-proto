@@ -180,8 +180,8 @@ def check_gsddmm():
 
 
 def check_gemm():
-    n_nodes = random.randint(1, 2048)
-    n_features = random.randint(1, 128)
+    n_nodes = random.randint(8, 1024)
+    n_features = random.randint(8, 256)
     x = torch.randn(
         [n_nodes, n_features]
     ).to('cuda')
@@ -202,11 +202,11 @@ def check_gemm():
     before = time.time()
     y_1, y_2 = fc_1(x), fc_2(x)
     torch.sum(y_1 + y_2).backward()
+    torch.cuda.synchronize()
+    t_1 = time.time() - before
     grad_x_1 = x.grad.clone()
     grad_fc_1 = fc_1.weight.grad.clone()
     grad_fc_2 = fc_2.weight.grad.clone()
-    torch.cuda.synchronize()
-    t_1 = time.time() - before
 
     #
     x.grad.zero_()
@@ -218,24 +218,27 @@ def check_gemm():
         fc_1.bias, fc_2.bias
     )
     torch.sum(y_3 + y_4).backward()
+    torch.cuda.synchronize()
+    t_2 = time.time() - before
     grad_x_2 = x.grad.clone()
     grad_fc_3 = fc_1.weight.grad.clone()
     grad_fc_4 = fc_2.weight.grad.clone()
-    torch.cuda.synchronize()
-    t_2 = time.time() - before
-    # print('{:.2f}'.format(t_1 / t_2))
-
+    
     #
     assert torch.allclose(y_1, y_3, atol=1e-3)
     assert torch.allclose(y_2, y_4, atol=1e-3)
     assert torch.allclose(grad_fc_1, grad_fc_3, atol=1e-3)
     assert torch.allclose(grad_fc_2, grad_fc_4, atol=1e-3)
     assert torch.allclose(grad_x_1, grad_x_2, atol=1e-3)
+    # print('{:.2f}'.format(t_2 / t_1))
 
     return
 
 
 def test():
+    a = torch.zeros(size=[1, 1])
+    v1 = a.stride(0)
+    v2 = a.stride(1)
     for _ in tqdm(range(65536)):
         # check_gspmm()
         # check_gsddmm()

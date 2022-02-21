@@ -26,15 +26,36 @@ std::vector<torch::Tensor> _b2gemm_cuda(const torch::Tensor &x,
     auto B = x.data_ptr<float>();
     auto C = y_a.data_ptr<float>();
     int offset_a = w_b.data_ptr<float>() - A;
+    int offset_c = y_b.data_ptr<float>() - C;
+
+    //
+    bool swap_a = false;
     if (offset_a < 0) {
+        swap_a = true;
         offset_a = -offset_a;
         A = w_b.data_ptr<float>();
     }
-    int offset_c = y_b.data_ptr<float>() - C;
+    bool swap_c = false;
     if (offset_c < 0) {
+        swap_c = true;
         offset_c = -offset_c;
         C = y_b.data_ptr<float>();
     }
+
+    /*
+    std::cout << "m:" << m
+              << " n:" << n
+              << " k:" << k
+              << " A:" << w_a.sizes()
+              << " B:" << x.sizes()
+              << " C:" << y_a.sizes()
+              << " lda:" << ld_a
+              << " ldb:" << ld_b
+              << " ldc:" << ld_c
+              << " offset_a:" << offset_a
+              << " offset_c:" << offset_c
+              << std::endl;
+    */
 
     float alpha = 1.0, beta = 0.0;
     CUBLAS_CHECK(cublasSgemmStridedBatched(
@@ -47,7 +68,10 @@ std::vector<torch::Tensor> _b2gemm_cuda(const torch::Tensor &x,
         &beta,
         C, ld_c, offset_c, 2));
 
-    return {y_a, y_b};
+    if (swap_a == swap_c) {
+        return {y_a, y_b};
+    }
+    return {y_b, y_a};
 }
 
 std::vector<torch::Tensor> _b2gemm_backward_cuda(const torch::Tensor &x,
@@ -57,7 +81,8 @@ std::vector<torch::Tensor> _b2gemm_backward_cuda(const torch::Tensor &x,
                                                  const torch::Tensor &grad_b) {
     TORCH_CHECK(x.dim() == 2);
     TORCH_CHECK(w_a.dim() == 2);
-    TORCH_CHECK(grad_a.dim() == 2);
+    TORCH_CHECK(grad_a.dim() == 2)
+    TORCH_CHECK(grad_a.stride(0) > 0);
     TORCH_CHECK(w_a.sizes() == w_b.sizes());
     TORCH_CHECK(w_a.strides() == w_b.strides());
     TORCH_CHECK(grad_a.sizes() == grad_b.sizes());
@@ -65,6 +90,7 @@ std::vector<torch::Tensor> _b2gemm_backward_cuda(const torch::Tensor &x,
     auto handle = at::cuda::getCurrentCUDABlasHandle();
 
     //
+    bool swap_dw = false;
     torch::Tensor dw_a, dw_b;
     {
         int n = grad_a.size(1);
@@ -82,14 +108,23 @@ std::vector<torch::Tensor> _b2gemm_backward_cuda(const torch::Tensor &x,
         auto B = grad_a.data_ptr<float>();
         auto C = dw_a.data_ptr<float>();
         int offset_b = grad_b.data_ptr<float>() - B;
-        if (offset_b < 0) {
-            offset_b = -offset_b;
-            B = grad_a.data_ptr<float>();
-        }
         int offset_c = dw_b.data_ptr<float>() - C;
+
+        //
+        bool swap_b = false;
+        if (offset_b < 0) {
+            swap_b = true;
+            offset_b = -offset_b;
+            B = grad_b.data_ptr<float>();
+        }
+        bool swap_c = false;
         if (offset_c < 0) {
+            swap_c = true;
             offset_c = -offset_c;
             C = dw_b.data_ptr<float>();
+        }
+        if (swap_b == swap_c) {
+            swap_dw = true;
         }
 
         float alpha = 1.0, beta = 0.0;
@@ -111,7 +146,6 @@ std::vector<torch::Tensor> _b2gemm_backward_cuda(const torch::Tensor &x,
         int k = grad_a.size(1);
         int m = x.size(1);
         dx = torch::zeros({2, n, m}, x.options());
-        // TORCH_CHECK(x.strides() == dx.strides());
 
         //
         int ld_a = w_a.stride(0);
@@ -121,28 +155,61 @@ std::vector<torch::Tensor> _b2gemm_backward_cuda(const torch::Tensor &x,
         auto B = grad_a.data_ptr<float>();
         auto C = dx.data_ptr<float>();
         int offset_a = w_b.data_ptr<float>() - A;
+        int offset_b = grad_b.data_ptr<float>() - B;
+        int offset_c = dx.stride(0);
+
+        //
+        bool swap_a = false;
         if (offset_a < 0) {
+            swap_a = true;
             offset_a = -offset_a;
             A = w_b.data_ptr<float>();
         }
-        int offset_b = grad_b.data_ptr<float>() - B;
+        bool swap_b = false;
         if (offset_b < 0) {
+            swap_b = true;
             offset_b = -offset_b;
-            B = grad_a.data_ptr<float>();
+            B = grad_b.data_ptr<float>();
         }
-        int offset_c = dx.stride(0);
 
+        //
         float alpha = 1.0, beta = 0.0;
-        CUBLAS_CHECK(cublasSgemmStridedBatched(
-            handle,
-            CUBLAS_OP_N, CUBLAS_OP_N,
-            m, n, k,
-            &alpha,
-            A, ld_a, offset_a,
-            B, ld_b, offset_b,
-            &beta,
-            C, ld_c, offset_c, 2));
+        if (swap_a == swap_b > 0) {
+            CUBLAS_CHECK(cublasSgemmStridedBatched(
+                handle,
+                CUBLAS_OP_N, CUBLAS_OP_N,
+                m, n, k,
+                &alpha,
+                A, ld_a, offset_a,
+                B, ld_b, offset_b,
+                &beta,
+                C, ld_c, offset_c, 2));
+        } else {
+            CUBLAS_CHECK(cublasSgemm(
+                handle,
+                CUBLAS_OP_N, CUBLAS_OP_N,
+                m, n, k,
+                &alpha,
+                w_a.data_ptr<float>(), ld_a,
+                grad_a.data_ptr<float>(), ld_b,
+                &beta,
+                dx.data_ptr<float>(), ld_c));
+            CUBLAS_CHECK(cublasSgemm(
+                handle,
+                CUBLAS_OP_N, CUBLAS_OP_N,
+                m, n, k,
+                &alpha,
+                w_b.data_ptr<float>(), ld_a,
+                grad_b.data_ptr<float>(), ld_b,
+                &beta,
+                dx.data_ptr<float>() + offset_c, ld_c));
+        }
+
+        dx = torch::sum(dx, 0);
     }
 
+    if (swap_dw) {
+        return {dx, dw_b, dw_a};
+    }
     return {dx, dw_a, dw_b};
 }
