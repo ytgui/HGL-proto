@@ -63,7 +63,7 @@ def check_hetero():
         hgraph=graph,
         in_features=d_hidden,
         gnn_features=d_hidden,
-        out_features=d_hidden,
+        out_features=n_labels,
         n_heads=n_heads
     ).to('cuda')
     node_indices = {
@@ -157,14 +157,17 @@ def check_hetero():
             epoch, loss_val, accuracy
         ))
         if accuracy > 0.6:
-            break
+            return True
     else:
-        raise RuntimeError("not convergent")
+        return False
 
 
 def test():
     for _ in tqdm(range(10)):
-        check_hetero()
+        if check_hetero():
+            break
+    else:
+        raise RuntimeError("not convergent")
 
 
 if __name__ == "__main__":

@@ -104,9 +104,6 @@ class Optimizer:
             dataflow = self._lower_spmm(
                 self._lower_sddmm(dataflow)
             )
-            dataflow = self._bundle_gemm(
-                dataflow
-            )
         else:
             raise NotImplementedError
         return dataflow
