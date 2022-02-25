@@ -95,20 +95,12 @@ def check_hetero():
     sageir.Printer().dump(dataflow)
 
     #
-    """
-    for sty, ety, dty in graph.hetero_graph:
-        n_src = graph.nty2num[sty]
-        n_dst = graph.nty2num[dty]
-        print('{}-->{}-->{}: [{}, {}]'.format(
-            sty, ety, dty, n_dst, n_src
-        ))
     print('===== stitch =====')
     stitcher = sageir.Stitcher()
     dataflow = stitcher.transform(
         dataflow, kwargs=kwargs
     )
     sageir.Printer().dump(dataflow)
-    """
 
     #
     print('===== executor =====')
@@ -140,10 +132,7 @@ def check_hetero():
         with torch.no_grad():
             logits = executor.run(
                 dataflow,
-                kwargs={
-                    'hgraph': graph,
-                    'xs': node_indices
-                }
+                kwargs=kwargs
             )
             assert logits.dim() == 2
             indices = torch.argmax(

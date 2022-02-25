@@ -43,39 +43,22 @@ class Stitcher:
         new_hgraph.device = hgraph.device
         new_hgraph.nty2num = hgraph.nty2num
         for idx, stitches in stitch_rules.items():
-            n_edges = 0
-            n_src_nodes = 0
-            indptr_list = []
-            indices_list = []
             # stitch
+            n_edges = 0
+            block_list = []
             for sty, ety, dty, num in stitches:
                 n_edges += num
                 old_blk = hgraph.hetero_graph[
                     sty, ety, dty
                 ].blk
-                n_src_nodes += old_blk.num_src_nodes()
-                indptr_list.append(old_blk.adj_sparse[0])
-                indices_list.append(old_blk.adj_sparse[1])
+                block_list.append(old_blk)
             # concat
             n_rows = hgraph.nty2num[dty]
-            new_indptr, new_indices = [], []
-            for row in tqdm(range(n_rows)):
-                new_indptr.append(len(new_indices))
-                for indptr, indices in \
-                        zip(indptr_list, indices_list):
-                    for i in range(indptr[row], indptr[row + 1]):
-                        new_indices.append(indices[i].item())
-            new_indptr.append(len(new_indices))
-            assert len(new_indptr) == n_rows + 1
-            assert len(new_indices) == n_edges
-            new_indptr = torch.IntTensor(
-                new_indptr).to(hgraph.device)
-            new_indices = torch.IntTensor(
-                new_indices).to(hgraph.device)
-            new_blk = block.Block(
-                size=[n_rows, n_src_nodes],
-                adj=[new_indptr, new_indices]
-            )
+            new_blk = block.stitch_csr(
+                block_list
+            ).to('cuda')
+            assert new_blk.size[0] == n_rows
+            assert len(new_blk.adj_sparse[1]) == n_edges
             # new name
             new_sty = '-->'.join(
                 item[0] for item in stitches
@@ -111,7 +94,7 @@ class Stitcher:
                             ety == etgt and \
                             dty == dtgt:
                         return idx
-            raise RuntimeError
+            return -1
 
         stitch_idxes = set()
         for spmm_node in spmm_nodes:
@@ -120,11 +103,12 @@ class Stitcher:
                 raise NotImplementedError
             graph_node = spmm_node.prevs['g']
             splited = graph_node.name.split('.')
-            stitch_idxes.add(
-                match_rule(
-                    *hgraph.idx2rel[int(splited[1])]
-                )
+            matched_idx = match_rule(
+                *hgraph.idx2rel[int(splited[1])]
             )
+            if matched_idx == -1:
+                continue
+            stitch_idxes.add(matched_idx)
 
         #
         def match_spmms(stitches):
@@ -141,14 +125,18 @@ class Stitcher:
             assert len(stitches) == len(node_res)
             return node_res
 
+        #
+        stitched_nodes = []
         for idx in stitch_idxes:
             stitches = stitch_rules[idx]
-            if len(stitches) < 2:
-                continue
             stitch_rel = stitch_map[idx]
             stitch_spmms = match_spmms(stitches)
-            new_graph = new_hgraph.hetero_graph[stitch_rel]
+            new_graph = ir.OpGraph(
+                new_hgraph.hetero_graph[stitch_rel].blk,
+                name='stitch.{}'.format(idx)
+            )
             # replace nodes
+            sddmm_scheme = None
             stitch_queries = []
             stitch_keys, stitch_values = [], []
             for spmm_node in stitch_spmms:
@@ -156,6 +144,7 @@ class Stitcher:
                 sddmm_node = spmm_node.prevs['e']
                 if not isinstance(sddmm_node, ir.OpFusedSDDMM):
                     raise NotImplementedError
+                sddmm_scheme = sddmm_node.fusion_scheme
                 value_node = spmm_node.prevs['x']
                 query_node = sddmm_node.prevs['q']
                 key_node = sddmm_node.prevs['k']
@@ -166,14 +155,32 @@ class Stitcher:
                 stitch_queries.append(query_node)
                 stitch_values.append(value_node)
                 stitch_keys.append(key_node)
+            # pack it
             new_key = ir.OpConcat(xs=stitch_keys, dim=0)
             new_value = ir.OpConcat(xs=stitch_values, dim=0)
-            new_query = ir.OpConcat(xs=stitch_queries, dim=0)
-            n_src = new_graph.num_src_nodes()
-            n_dst = new_graph.num_dst_nodes()
-            a = 0
+            new_query = ir.OpStack(xs=stitch_queries, dim=0)
+            assert new_query.size[0] == len(stitch_queries)
+            assert new_query.size[1] == new_graph.size[0]
+            assert new_value.size[0] == new_graph.size[1]
+            assert new_key.size[0] == new_graph.size[1]
+            # new node
+            n_edges = sum([
+                item[-1]
+                for item in stitches
+            ])
+            new_sddmm = ir.OpFusedSDDMM(
+                size=[n_edges, new_key.size[-1]],
+                graph=new_graph, query=new_query,
+                key=new_key, fusion_scheme=sddmm_scheme
+            )
+            new_spmm = ir.OpFusedSPMM(
+                graph=new_graph,
+                edge=new_sddmm,
+                x=new_value
+            )
+            stitched_nodes.append(new_spmm)
 
-        return
+        return stitched_nodes
 
     def _stitch_hetg(self, dataflow: ir.Op, kwargs: dict):
         # group by dty
@@ -199,6 +206,10 @@ class Stitcher:
             )
             for candidate in self._packing_ffd(
                     het_weights, cap=bin_cap // 2):
+                if len(candidate) == 1:
+                    continue
+                if len(candidate) > 16:
+                    continue
                 idx = len(stitch_rules)
                 stitch_rules[idx] = candidate
 
@@ -261,14 +272,29 @@ class Stitcher:
                 continue
             spmm_nodes = visit_spmm(accum_nodes)
             assert len(spmm_nodes) == len(accum_nodes) + 1
-            self._replace_spmm(
+            stitched_node = self._replace_spmm(
                 spmm_nodes=spmm_nodes, hgraph=hgraph,
                 stitch_rules=stitch_rules, stitch_map=stitch_map,
                 new_hgraph=new_hgraph
             )
-            a = 0
+            new_accum = None
+            if len(stitched_node) == 1:
+                new_accum = stitched_node[0]
+            elif len(stitched_node) == 2:
+                new_accum = ir.OpAdd(
+                    stitched_node[0],
+                    stitched_node[1]
+                )
+            else:
+                raise RuntimeError
+            if len(new_accum.size) == 3:
+                new_accum = ir.OpMean(
+                    new_accum, dim=1
+                )
+            scale_node.prevs['x'] = new_accum
 
-        raise NotImplementedError
+        kwargs['stitch'] = new_hgraph
+        return dataflow
 
     def transform(self, dataflow, kwargs: dict):
         if isinstance(dataflow, ir.Op):

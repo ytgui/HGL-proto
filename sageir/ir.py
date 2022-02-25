@@ -113,6 +113,22 @@ class OpScale(OpTensor):
         self.val_params['scale'] = scale
 
 
+class OpStack(OpTensor):
+    def __init__(self,
+                 xs: List[OpTensor],
+                 dim: int,
+                 name: str = ''):
+        if dim != 0:
+            raise NotImplementedError
+        OpTensor.__init__(
+            self,
+            size=[len(xs)] + list(xs[0].size),
+            prevs={k: v for k, v in enumerate(xs)},
+            name=name
+        )
+        self.val_params['dim'] = dim
+
+
 class OpConcat(OpTensor):
     def __init__(self,
                  xs: List[OpTensor],
@@ -127,7 +143,7 @@ class OpConcat(OpTensor):
         OpTensor.__init__(
             self,
             size=size,
-            prevs={'x': x},
+            prevs={k: v for k, v in enumerate(xs)},
             name=name
         )
         self.val_params['dim'] = dim
@@ -203,20 +219,16 @@ class OpFusedSPMM(OpTensor):
         assert len(x.size) == 3
         assert graph.size[1] == x.size[0]
         if edge is None:
-            OpTensor.__init__(
-                self,
-                size=x.size,
-                prevs={'g': graph, 'x': x},
-                name=name
-            )
+            prevs = {'g': graph, 'x': x}
         else:
             assert len(edge.size) == 2
-            OpTensor.__init__(
-                self,
-                size=x.size,
-                prevs={'g': graph, 'e': edge, 'x': x},
-                name=name
-            )
+            prevs = {'g': graph, 'e': edge, 'x': x}
+        OpTensor.__init__(
+            self,
+            size=[graph.size[0]] + x.size[1:],
+            prevs=prevs,
+            name=name
+        )
 
 
 class OpFusedSDDMM(OpGraph):
@@ -228,10 +240,10 @@ class OpFusedSDDMM(OpGraph):
                  fusion_scheme: str,
                  name: str = ''):
         assert len(graph.size) == 2
-        assert len(query.size) == 2
+        assert len(query.size) in [2, 3]
         assert len(key.size) == 2
-        assert query.size[1] == key.size[1]
-        assert graph.size[0] == query.size[0]
+        assert query.size[-1] == key.size[-1]
+        assert graph.size[0] == query.size[-2]
         assert graph.size[1] == key.size[0]
         OpTensor.__init__(
             self,

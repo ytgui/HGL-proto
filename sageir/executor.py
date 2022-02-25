@@ -67,6 +67,20 @@ class Executor:
                     child_args['a'], child_args['b'],
                 )
             return self._cache[root_node]
+        elif isinstance(root_node, ir.OpConcat):
+            if root_node not in self._cache:
+                self._cache[root_node] = torch.cat(
+                    [v for _, v in child_args.items()],
+                    dim=root_node.val_params['dim'],
+                )
+            return self._cache[root_node]
+        elif isinstance(root_node, ir.OpStack):
+            if root_node not in self._cache:
+                self._cache[root_node] = torch.stack(
+                    [v for _, v in child_args.items()],
+                    dim=root_node.val_params['dim'],
+                )
+            return self._cache[root_node]
         elif isinstance(root_node, ir.OpEmbed):    
             if root_node not in self._cache:
                 self._cache[root_node] = functional.embedding(

@@ -405,10 +405,14 @@ class BenchMethods:
         # optimizer
         mod2ir = sageir.Module2IR()
         optimizer = sageir.Optimizer()
+        stitcher = sageir.Stitcher()
         dataflow = mod2ir.transform(
             model, kwargs=kwargs
         )[category]
         dataflow = optimizer.lower(
+            dataflow, kwargs=kwargs
+        )
+        dataflow = stitcher.transform(
             dataflow, kwargs=kwargs
         )
         executor = sageir.Executor()

@@ -12,6 +12,8 @@ class Optimizer:
         for name in root_node.prevs:
             child = root_node.prevs[name]
             child = self._lower_spmm(child)
+            if root_node not in child.next:
+                child.next.append(root_node)
             root_node.prevs[name] = child
 
         # transform
