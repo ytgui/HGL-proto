@@ -68,13 +68,19 @@ class OpView(OpTensor):
                  x: OpTensor,
                  size: list,
                  name: str = ''):
-        size = list(size)
+        eval_size = []
+        for i, s in enumerate(size):
+            if s != -1:
+                eval_size.append(s)
+            else:
+                eval_size.append(x.size[i])
         OpTensor.__init__(
             self,
-            size=size,
+            size=eval_size,
             prevs={'x': x},
             name=name
         )
+        self.val_params['size'] = size
 
 
 class OpMean(OpTensor):
@@ -114,7 +120,7 @@ class OpConcat(OpTensor):
                  name: str = ''):
         if dim != 0:
             raise NotImplementedError
-        size = xs[0].size
+        size = list(xs[0].size)
         for x in xs[1:]:
             size[0] += x.size[0]
             assert size[1:] == x.size[1:]
@@ -195,6 +201,7 @@ class OpFusedSPMM(OpTensor):
                  x: OpTensor,
                  name: str = ''):
         assert len(x.size) == 3
+        assert graph.size[1] == x.size[0]
         if edge is None:
             OpTensor.__init__(
                 self,

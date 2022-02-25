@@ -91,7 +91,7 @@ class Executor:
         elif isinstance(root_node, ir.OpView):
             if root_node not in self._cache:
                 self._cache[root_node] = child_args['x'].view(
-                    size=root_node.size
+                    size=root_node.val_params['size']
                 )
             return self._cache[root_node]
         elif isinstance(root_node, ir.OpRelu):

@@ -44,7 +44,7 @@ def dump_data():
 
 
 def check_hetero():
-    dump_data()
+    # dump_data()
     dataset = torch.load(
         '.data/mutag-hetero.pt'
     )
@@ -95,12 +95,20 @@ def check_hetero():
     sageir.Printer().dump(dataflow)
 
     #
-    # print('===== stitch =====')
-    # stitcher = sageir.Stitcher()
-    # dataflow = stitcher.transform(
-    #     dataflow, kwargs=kwargs
-    # )
-    # sageir.Printer().dump(dataflow)
+    """
+    for sty, ety, dty in graph.hetero_graph:
+        n_src = graph.nty2num[sty]
+        n_dst = graph.nty2num[dty]
+        print('{}-->{}-->{}: [{}, {}]'.format(
+            sty, ety, dty, n_dst, n_src
+        ))
+    print('===== stitch =====')
+    stitcher = sageir.Stitcher()
+    dataflow = stitcher.transform(
+        dataflow, kwargs=kwargs
+    )
+    sageir.Printer().dump(dataflow)
+    """
 
     #
     print('===== executor =====')

@@ -153,30 +153,39 @@ class BenchMethods:
             divider, dataset.name, divider
         ))
         graph: dgl.DGLGraph = dataset[0]
-        print('n_nodes:', graph.num_nodes())
-        print('n_edges:', graph.num_edges())
         if graph.is_homogeneous:
             avg_degrees = torch.mean(
                 graph.in_degrees().type(
                     torch.FloatTensor
                 )
             ).item()
+            print('n_nodes:', graph.num_nodes())
+            print('n_edges:', graph.num_edges())
+            print('avg_degrees:', avg_degrees)
         else:
+            n_nodes = 0
+            n_edges = 0
             avg_degrees = []
             print(
                 'meta-paths:',
                 len(graph.canonical_etypes)
             )
-            for ety in graph.canonical_etypes:
+            for sty, ety, dty in graph.canonical_etypes:
                 avg_degrees.append(
                     torch.mean(
-                        graph.in_degrees(etype=ety).type(
+                        graph.in_degrees(
+                            etype=(sty, ety, dty)
+                        ).type(
                             torch.FloatTensor
                         )
                     ).item()
                 )
+                n_nodes += graph.num_dst_nodes(dty)
+                n_edges += graph.num_edges((sty, ety, dty))
+            print('n_nodes:', n_nodes)
+            print('n_edges:', n_edges)
             avg_degrees = sum(avg_degrees) / len(avg_degrees)
-        print('avg_degrees:', avg_degrees)
+            print('avg_degrees:', avg_degrees)
 
     @staticmethod
     def _bench_dgl_homo(dataset, model, d_hidden):
@@ -190,6 +199,7 @@ class BenchMethods:
         n_epochs = 20
         graph = dataset[0].to('cuda')
         n_nodes = graph.num_nodes()
+        print('n_nodes:', n_nodes)
         n_labels = dataset.num_classes
         print('n_labels:', n_labels)
         feature = graph.ndata.pop('feats')
@@ -218,7 +228,7 @@ class BenchMethods:
         timing = None
         time.sleep(2.0)
         print('[TRAINING]')
-        with utils.Profiler() as prof:
+        with utils.Profiler(n_epochs) as prof:
             for _ in range(n_epochs):
                 y = model(graph, feature)
                 y.backward(gradient=gradient)
@@ -237,7 +247,9 @@ class BenchMethods:
         # dataset
         n_epochs = 20
         graph = dataset[0].to('cuda')
-        n_nodes = graph.num_nodes()
+        n_nodes = 0
+        for _, _, dty in graph.canonical_etypes:
+            n_nodes += graph.num_dst_nodes(dty)
         print('n_nodes:', n_nodes)
         n_labels = dataset.num_classes
         print('n_labels:', n_labels)
@@ -265,7 +277,7 @@ class BenchMethods:
         timing = None
         time.sleep(2.0)
         print('[TRAINING]')
-        with utils.Profiler() as prof:
+        with utils.Profiler(n_epochs) as prof:
             for _ in range(n_epochs):
                 y = model(graph)[category]
                 y.backward(gradient=gradient)
@@ -286,6 +298,7 @@ class BenchMethods:
         dglgraph = dataset[0].to('cuda')
         graph = mp.from_dglgraph(dglgraph)
         n_nodes = dglgraph.num_nodes()
+        print('n_nodes:', n_nodes)
         n_labels = dataset.num_classes
         print('n_labels:', n_labels)
         feature = dglgraph.ndata.pop('feat')
@@ -333,7 +346,7 @@ class BenchMethods:
         timing = None
         time.sleep(2.0)
         print('[TRAINING]')
-        with utils.Profiler() as prof:
+        with utils.Profiler(n_epochs) as prof:
             for _ in range(n_epochs):
                 y = executor.run(
                     dataflow, kwargs=kwargs
@@ -355,7 +368,9 @@ class BenchMethods:
         n_epochs = 20
         dglgraph = dataset[0].to('cuda')
         graph = mp.from_dglgraph(dglgraph)
-        n_nodes = dglgraph.num_nodes()
+        n_nodes = 0
+        for _, _, dty in dglgraph.canonical_etypes:
+            n_nodes += dglgraph.num_dst_nodes(dty)
         print('n_nodes:', n_nodes)
         n_labels = dataset.num_classes
         print('n_labels:', n_labels)
@@ -410,7 +425,7 @@ class BenchMethods:
         timing = None
         time.sleep(2.0)
         print('[TRAINING]')
-        with utils.Profiler() as prof:
+        with utils.Profiler(n_epochs) as prof:
             for _ in range(n_epochs):
                 y = executor.run(
                     dataflow, kwargs=kwargs
@@ -425,8 +440,8 @@ class Benchmark(BenchMethods):
     HOM_DATASETS = [
         cit.CoraGraphDataset,
         bench.CoraFullDataset,
-        # cit.PubmedGraphDataset,
-        # reddit.RedditDataset
+        cit.PubmedGraphDataset,
+        reddit.RedditDataset
     ]
     HET_DATASETS = [
         rdf.AIFBDataset, rdf.MUTAGDataset,

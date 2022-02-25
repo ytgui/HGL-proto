@@ -38,10 +38,12 @@ class GSPMMFunction(autograd.Function):
 def gspmm(block: block.Block,
           edge: torch.Tensor,
           x: torch.Tensor):
+    assert x.dim() == 3
     indices = block.adj_sparse[1]
     if edge is None:
         edge = torch.ones(
-            size=[indices.size(0), 1],
+            size=[indices.size(0),
+                  x.size(1)],
             device=x.device
         )
     return GSPMMFunction.apply(
@@ -82,6 +84,8 @@ class GSDDMMFunction(autograd.Function):
 def fused_gsddmm(block: block.Block,
                  query: torch.Tensor,
                  key: torch.Tensor):
+    if query.dim() == 2:
+        query = query.unsqueeze(0)
     return GSDDMMFunction.apply(
         block.adj_sparse, query, key
     )

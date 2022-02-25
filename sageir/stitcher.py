@@ -160,14 +160,17 @@ class Stitcher:
                 query_node = sddmm_node.prevs['q']
                 key_node = sddmm_node.prevs['k']
                 #
+                assert graph_node.size[0] == query_node.size[0]
+                assert graph_node.size[1] == value_node.size[0]
+                assert graph_node.size[1] == key_node.size[0]
                 stitch_queries.append(query_node)
                 stitch_values.append(value_node)
                 stitch_keys.append(key_node)
             new_key = ir.OpConcat(xs=stitch_keys, dim=0)
             new_value = ir.OpConcat(xs=stitch_values, dim=0)
             new_query = ir.OpConcat(xs=stitch_queries, dim=0)
-            a1 = new_graph.num_src_nodes()
-            a2 = new_graph.num_dst_nodes()
+            n_src = new_graph.num_src_nodes()
+            n_dst = new_graph.num_dst_nodes()
             a = 0
 
         return
@@ -229,7 +232,7 @@ class Stitcher:
             if spmm_nodes is None:
                 spmm_nodes = set()
             for node in root_nodes:
-                if isinstance(node, ir.OpSPMM):
+                if isinstance(node, ir.OpFusedSPMM):
                     spmm_nodes.add(node)
                     continue
                 for child in node.prevs.values():
@@ -245,14 +248,17 @@ class Stitcher:
             if accum_nodes is None:
                 accum_nodes = set()
             for child in root_node.prevs.values():
-                if isinstance(child, ir.OpAdd):
-                    accum_nodes.add(child)
-                    visit_accumulate(child, accum_nodes)
+                if not isinstance(child, ir.OpAdd):
+                    continue
+                visit_accumulate(child, accum_nodes)
+                accum_nodes.add(child)
             return accum_nodes
 
         # begin stitching
         for scale_node in scale_nodes:
             accum_nodes = visit_accumulate(scale_node)
+            if not accum_nodes:
+                continue
             spmm_nodes = visit_spmm(accum_nodes)
             assert len(spmm_nodes) == len(accum_nodes) + 1
             self._replace_spmm(

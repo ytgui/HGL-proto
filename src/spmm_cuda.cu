@@ -10,7 +10,7 @@ __global__ void _spmm_forward_kernel(
             for (index_t k = threadIdx.x; k < n_features; k += blockDim.x) {
                 value_t out = 0.0;
                 for (index_t i = indptr[row]; i < indptr[row + 1]; i += 1) {
-                    index_t col = indices[i];
+                    index_t col = 0xffffff & indices[i];
                     out += values[i * n_heads + h] *
                            features[col * n_heads * n_features + h * n_features + k];
                 }
@@ -30,7 +30,7 @@ __global__ void _spmm_backward_kernel(
             for (index_t k = threadIdx.x; k < n_features; k += blockDim.x) {
                 value_t grad_row = grad_out[row * n_heads * n_features + h * n_features + k];
                 for (index_t i = indptr[row]; i < indptr[row + 1]; i += 1) {
-                    index_t col = indices[i];
+                    index_t col = 0xffffff & indices[i];
                     atomicAdd(&grad_a[i * n_heads + h],
                               grad_row * features[col * n_heads * n_features + h * n_features + k]);
                     atomicAdd(&grad_x[col * n_heads * n_features + h * n_features + k],

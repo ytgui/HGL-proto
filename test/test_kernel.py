@@ -1,7 +1,7 @@
 import torch
 import random
 from torch import nn
-from sageir import sparse, bundle, convert
+from sageir import block, sparse, bundle, convert
 from tqdm import tqdm
 
 
@@ -38,11 +38,12 @@ def check_gspmm():
     linear = nn.Linear(
         n_features, n_features
     ).to('cuda')
-    indptr = indptr.to('cuda')
-    indices = indices.to('cuda')
-    adj_sparse = [indptr, indices]
+    blk = block.Block(
+        size=[n_dst, n_src],
+        adj=[indptr, indices]
+    ).to('cuda')
     attn_adjacency = convert.to_dense_mha(
-        n_dst, n_src, adj_sparse, values
+        n_dst, n_src, blk.adj_sparse, values
     ).to('cuda')
     attn_adjacency.requires_grad = True
     adj_adjacency = adj_adjacency.to('cuda')
@@ -61,13 +62,13 @@ def check_gspmm():
 
     #
     linear.zero_grad()
-    y_2 = sparse.GSPMMFunction.apply(
-        adj_sparse, values, linear(x)
+    y_2 = sparse.gspmm(
+        blk, values, linear(x)
     )
     y_2.sum().backward()
     grad_3 = linear.weight.grad.clone()
     grad_4 = convert.to_dense_mha(
-        n_dst, n_src, adj_sparse,
+        n_dst, n_src, blk.adj_sparse,
         values.grad.clone()
     ).to('cuda')
 
@@ -118,9 +119,10 @@ def check_gsddmm():
     linear_k = nn.Linear(
         n_features, 1
     ).to('cuda')
-    indptr = indptr.to('cuda')
-    indices = indices.to('cuda')
-    adj_sparse = [indptr, indices]
+    blk = block.Block(
+        size=[n_dst, n_src],
+        adj=[indptr, indices]
+    ).to('cuda')
     adj_adjacency = adj_adjacency.to('cuda')
 
     #
@@ -157,11 +159,11 @@ def check_gsddmm():
     linear_k.zero_grad()
     q = linear_q(x_dst).squeeze(-1)
     k = linear_k(x_src).squeeze(-1)
-    attn_2 = sparse.GSDDMMFunction.apply(
-        adj_sparse, q, k
+    attn_2 = sparse.fused_gsddmm(
+        blk, q, k
     )
-    y_2 = sparse.GSPMMFunction.apply(
-        adj_sparse, attn_2, x_src
+    y_2 = sparse.gspmm(
+        blk, attn_2, x_src
     )
     y_2.sum().backward()
     grad_q_2 = linear_q.weight.grad.clone()
@@ -226,7 +228,130 @@ def check_gemm():
     assert torch.allclose(grad_fc_2, grad_fc_4, atol=1e-3)
     assert torch.allclose(grad_x_1, grad_x_2, atol=1e-3)
 
-    return
+
+def check_stitch():
+    n_dst = random.randint(1, 64)
+    n_heads = random.randint(1, 8)
+    n_stitches = random.randint(2, 8)
+    n_features = random.randint(1, 256)
+
+    #
+    src_list = []
+    dst_list = []
+    block_list = []
+    adjacency_list = []
+    while True:
+        density = 0.02
+        n_src = random.randint(1, 256)
+        #
+        dense_raw = torch.rand(
+            size=[n_dst, n_src]
+        )
+        adj_adjacency = torch.where(
+            dense_raw < density, 1.0, 0.0
+        )
+        if adj_adjacency.max() == 0.0:
+            continue
+        indptr, indices = convert.to_csr(
+            adj_adjacency
+        )[0]
+        assert n_dst == len(indptr) - 1
+        src_list.append(
+            torch.randn(
+                [n_src, n_heads, n_features]
+            ).to('cuda')
+        )
+        dst_list.append(
+            torch.randn(
+                [n_dst, n_heads, n_features]
+            ).to('cuda')
+        )
+        block_list.append(
+            block.Block(
+                size=[n_dst, n_src],
+                adj=[indptr, indices]
+            ).to('cuda')
+        )
+        adjacency_list.append(
+            adj_adjacency.to('cuda')
+        )
+        if len(block_list) == n_stitches:
+            break
+
+    #
+    new_src = torch.cat(
+        src_list, dim=0
+    ).to('cuda')
+    new_dst = torch.stack(
+        dst_list, dim=0
+    ).to('cuda')
+    new_block = block.stitch_csr(
+        block_list
+    ).to('cuda')
+    new_adjacency = torch.cat(
+        adjacency_list, dim=-1
+    ).to('cuda')
+    assert new_block.size[1] == new_src.size(0)
+    assert new_block.size[0] == new_dst.size(1)
+    assert new_block.size[0] == new_adjacency.size(0)
+    assert new_block.size[1] == new_adjacency.size(1)
+    linear_q = nn.Linear(n_features, 1).to('cuda')
+    linear_k = nn.Linear(n_features, 1).to('cuda')
+    linear_v = nn.Linear(n_features, n_features).to('cuda')
+
+    #
+    y_1 = torch.zeros([
+        n_dst, n_heads, n_features
+    ], device='cuda')
+    for blk, src, dst in \
+            zip(block_list, src_list, dst_list):
+        q = torch.squeeze(
+            linear_q(dst), dim=-1
+        )
+        k = torch.squeeze(
+            linear_k(src), dim=-1
+        )
+        v = linear_v(src)
+        e_1 = sparse.fused_gsddmm(
+            blk, q, k
+        )
+        y_1 += sparse.gspmm(
+            blk, e_1, v
+
+        )
+    torch.sum(y_1).backward()
+    grad_q_1 = linear_q.weight.grad.clone()
+    grad_k_1 = linear_k.weight.grad.clone()
+    grad_v_1 = linear_v.weight.grad.clone()
+
+    #
+    linear_q.zero_grad()
+    linear_k.zero_grad()
+    linear_v.zero_grad()
+    q = torch.squeeze(
+        linear_q(new_dst), dim=-1
+    )
+    k = torch.squeeze(
+        linear_k(new_src), dim=-1
+    )
+    v = linear_v(new_src)
+    e_2 = sparse.fused_gsddmm(
+        new_block, q, k
+    )
+    y_2 = sparse.gspmm(
+        new_block, e_2, v
+
+    )
+    torch.sum(y_2).backward()
+    grad_q_2 = linear_q.weight.grad.clone()
+    grad_k_2 = linear_k.weight.grad.clone()
+    grad_v_2 = linear_v.weight.grad.clone()
+
+    #
+    assert torch.allclose(y_1, y_2, atol=1e-3)
+    assert torch.allclose(grad_q_1, grad_q_2, atol=1e-3)
+    assert torch.allclose(grad_k_1, grad_k_2, atol=1e-3)
+    assert torch.allclose(grad_v_1, grad_v_2, atol=1e-3)
 
 
 def test():
@@ -234,6 +359,7 @@ def test():
         check_gspmm()
         check_gsddmm()
         check_gemm()
+        check_stitch()
 
 
 if __name__ == "__main__":
