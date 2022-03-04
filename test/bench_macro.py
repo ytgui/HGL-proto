@@ -353,34 +353,52 @@ class BenchMethods:
 
 
 class Benchmark(BenchMethods):
-    HOM_DATASETS = [
-        cit.CoraGraphDataset,
-        bench.CoraFullDataset,
-        cit.PubmedGraphDataset,
-        reddit.RedditDataset
-    ]
-    HET_DATASETS = [
-        rdf.AIFBDataset, rdf.MUTAGDataset,
-        # rdf.BGSDataset, rdf.AMDataset
-    ]
-    HOM_CMP_MODELS = [
+    HOM_MODELS = [
         (DGLGATModel, GATModel),
         (DGLGCNModel, GCNModel)
     ]
-    HET_CMP_MODELS = [
+    HET_MODELS = [
         (DGLRGATModel, RGATModel)
     ]
+    HOM_DATASETS = [
+        'cora_tiny', 'amazon', 'cora_full', 'reddit',
+    ]
+    HET_DATASETS = [
+        'aifb_hetero', 'mutag_hetero', 'bgs_hetero', 'am_hetero'
+    ]
+    DGL_DATASETS = {
+        'cora_tiny': cit.CoraGraphDataset,  # 2.7k
+        'amazon': bench.AmazonCoBuyPhotoDataset,  # 7.7k
+        'cora_full': bench.CoraFullDataset,  # 19.8k
+        'reddit': reddit.RedditDataset,  # 233.0k
+        #
+        'aifb_hetero': rdf.AIFBDataset,  # 7.3k
+        'mutag_hetero': rdf.MUTAGDataset,  # 27.2k
+        'bgs_hetero': rdf.BGSDataset,  # 94.8k
+        'am_hetero': rdf.AMDataset  # 881.7k
+    }
+    PYG_DATASETS = {
+        'cora_tiny': lambda: pygds.Planetoid(root='.data', name='Cora'),
+        'amazon': lambda: pygds.Amazon(root='.data', name='Photo'),
+        'cora_full': lambda: pygds.CoraFull(root='.data'),
+        'reddit': lambda: pygds.Reddit(root='.data'),
+        #
+        'aifb_hetero': lambda: pygds.Reddit(root='.data', name='AIFB'),
+        'mutag_hetero': lambda: pygds.Reddit(root='.data', name='MUTAG'),
+        'bgs_hetero': lambda: pygds.Reddit(root='.data', name='BGS'),
+        'am_hetero': lambda: pygds.Reddit(root='.data', name='AM'),
+    }
 
     def dataset_info(self):
         for dataset in self.HOM_DATASETS:
-            dataset = dataset(
-                verbose=False
-            )
+            dataset = self.DGL_DATASETS[
+                dataset
+            ](verbose=False)
             self._check_dataset(dataset)
         for dataset in self.HET_DATASETS:
-            dataset = dataset(
-                verbose=False
-            )
+            dataset = self.DGL_DATASETS[
+                dataset
+            ](verbose=False)
             self._check_dataset(dataset)
 
     def bench_homogenous(self):
@@ -428,19 +446,10 @@ class Benchmark(BenchMethods):
 
 
 def main():
-    bench = Benchmark()
-    dataset = pygds.Planetoid(
-        root='.data', name='cora'
-    )
-    bench._bench_pyg_homo(dataset, PyGGCNModel, 16)
-    # bench.dataset_info()
+    benchmark = Benchmark()
+    benchmark.dataset_info()
     # bench.bench_heterogenous()
 
 
 if __name__ == "__main__":
-    """
-    + end-to-end speedup
-    + memory allocation, reclamation
-    + kernel counting and portions
-    """
     main()
