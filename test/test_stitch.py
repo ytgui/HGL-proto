@@ -79,8 +79,7 @@ def check_stitch():
 
 
 def test():
-    for _ in range(10):
-        check_stitch()
+    check_stitch()
 
 
 if __name__ == "__main__":

@@ -7,7 +7,7 @@ from common.model import RGATModel
 from tqdm import tqdm
 
 
-def dump_data():
+def check_hetero():
     dataset = MUTAGDataset(
         verbose=False
     )
@@ -30,30 +30,6 @@ def dump_data():
     )[pred_cat].type(
         torch.BoolTensor
     ).to('cuda')
-    torch.save(
-        {
-            'graph': graph,
-            'label': label,
-            'pred_cat': pred_cat,
-            'n_labels': n_labels,
-            'test_mask': test_mask,
-            'train_mask': train_mask,
-        },
-        '.data/{}.pt'.format(dataset.name)
-    )
-
-
-def check_hetero():
-    # dump_data()
-    dataset = torch.load(
-        '.data/mutag-hetero.pt'
-    )
-    graph = dataset['graph']
-    label = dataset['label']
-    pred_cat = dataset['pred_cat']
-    n_labels = dataset['n_labels']
-    test_mask = dataset['test_mask']
-    train_mask = dataset['train_mask']
     print('predict_category:', pred_cat)
 
     #

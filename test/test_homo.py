@@ -7,7 +7,7 @@ from common.model import GATModel
 from tqdm import tqdm
 
 
-def dump_data():
+def check_homo():
     dataset = CoraGraphDataset(
         verbose=True
     )
@@ -26,29 +26,6 @@ def dump_data():
         'train_mask'
     ).type(torch.BoolTensor).to('cuda')
     n_labels = dataset.num_classes
-    torch.save(
-        {
-            'graph': graph,
-            'label': label,
-            'feature': feature,
-            'n_labels': n_labels,
-            'test_mask': test_mask,
-            'train_mask': train_mask
-        },
-        '.data/{}.pt'.format(dataset.name)
-    )
-
-
-def check_homo():
-    dataset = torch.load(
-        '.data/cora_v2.pt'
-    )
-    graph = dataset['graph']
-    label = dataset['label']
-    feature = dataset['feature']
-    n_labels = dataset['n_labels']
-    test_mask = dataset['test_mask']
-    train_mask = dataset['train_mask']
     n_features = feature.size(1)
 
     #
