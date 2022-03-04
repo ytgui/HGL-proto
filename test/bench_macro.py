@@ -2,146 +2,14 @@ import time
 import torch
 import sageir
 import dgl as dgl
-from torch import nn
-from dgl import nn as dglnn
 from sageir import mp, utils
 from dgl.data import rdf, reddit
 from dgl.data import citation_graph as cit
 from dgl.data import gnn_benchmark as bench
+from torch_geometric import datasets as pygds
 from common.model import GCNModel, GATModel, RGATModel
-
-
-class DGLGCNModel(nn.Module):
-    def __init__(self,
-                 in_features: int,
-                 gnn_features: int,
-                 out_features: int):
-        nn.Module.__init__(self)
-        self.i2h = dglnn.GraphConv(
-            in_features, gnn_features,
-            norm='right', bias=True
-        )
-        self.h2o = dglnn.GraphConv(
-            gnn_features, out_features,
-            norm='right', bias=True
-        )
-        self.activation = nn.Sequential(
-            nn.Dropout(0.5),
-            nn.ReLU(),
-        )
-
-    def forward(self, block, x):
-        x = self.i2h(block, x)
-        x = self.activation(x)
-        x = self.h2o(block, x)
-        return x
-
-
-class DGLGATModel(nn.Module):
-    def __init__(self,
-                 in_features: int,
-                 gnn_features: int,
-                 out_features: int,
-                 n_heads: int = 8):
-        nn.Module.__init__(self)
-        self.i2h = dglnn.GATConv(
-            in_features, gnn_features, n_heads,
-            activation=None, bias=True
-        )
-        self.h2o = dglnn.GATConv(
-            gnn_features, out_features, n_heads,
-            activation=None, bias=True
-        )
-        self.activation = nn.Sequential(
-            nn.Dropout(0.5),
-            nn.ELU()
-        )
-
-    def forward(self, block, x):
-        x = torch.mean(
-            self.i2h(block, x),
-            dim=1
-        )
-        x = self.activation(x)
-        x = torch.mean(
-            self.h2o(block, x),
-            dim=1
-        )
-        return x
-
-
-class DGLREmbedding(nn.Module):
-    def __init__(self,
-                 g: dgl.DGLHeteroGraph,
-                 embedding_dim: int):
-        nn.Module.__init__(self)
-        self.embeds = nn.ModuleDict({
-            nty: nn.Embedding(
-                g.num_nodes(nty),
-                embedding_dim
-            )
-            for nty in g.ntypes
-        })
-
-    def forward(self, block):
-        return {
-            nty: self.embeds[
-                nty
-            ].weight
-            for nty in sorted(list(block.ntypes))
-        }
-
-
-class DGLRGATModel(nn.Module):
-    def __init__(self,
-                 g: dgl.DGLHeteroGraph,
-                 in_features: int,
-                 gnn_features: int,
-                 out_features: int,
-                 n_heads: int = 8):
-        nn.Module.__init__(self)
-        #
-        self.embed = DGLREmbedding(
-            g, embedding_dim=in_features
-        )
-        self.i2h = dglnn.HeteroGraphConv(
-            {
-                ety: dglnn.GATConv(
-                    in_features, gnn_features, n_heads,
-                    activation=None, bias=True
-                )
-                for ety in sorted(list(g.etypes))
-            }, aggregate='sum'
-        )
-        self.h2o = dglnn.HeteroGraphConv(
-            {
-                ety: dglnn.GATConv(
-                    gnn_features, out_features, n_heads,
-                    activation=None, bias=True
-                )
-                for ety in sorted(list(g.etypes))
-            }, aggregate='sum'
-        )
-        self.activation = nn.Sequential(
-            nn.Dropout(0.5),
-            nn.ReLU(),
-        )
-
-    def forward(self, block):
-        xs = self.embed(block)
-        hs = self.i2h(block, xs)
-        hs = {
-            k: self.activation(
-                torch.mean(h, dim=1)
-            )
-            for k, h in hs.items()
-        }
-        hs = self.h2o(block, hs)
-        hs = {
-            k: torch.mean(h, dim=1)
-            for k, h in hs.items()
-        }
-        return hs
+from common.dglmodel import DGLGCNModel, DGLGATModel, DGLRGATModel
+from common.pygmodel import PyGGCNModel
 
 
 class BenchMethods:
@@ -202,14 +70,13 @@ class BenchMethods:
         print('n_nodes:', n_nodes)
         n_labels = dataset.num_classes
         print('n_labels:', n_labels)
-        feature = graph.ndata.pop('feats')
+        feature = graph.ndata.pop(
+            'feats'
+        ).to('cuda')
         n_features = feature.size(-1)
         print('n_features:', n_features)
 
         # inputs
-        feature = torch.randn(
-            size=[n_nodes, n_features]
-        ).to('cuda')
         gradient = torch.ones(
             [n_nodes, n_labels]
         ).to('cuda')
@@ -280,6 +147,51 @@ class BenchMethods:
         with utils.Profiler(n_epochs) as prof:
             for _ in range(n_epochs):
                 y = model(graph)[category]
+                y.backward(gradient=gradient)
+            torch.cuda.synchronize()
+            timing = prof.timing() / n_epochs
+        print('throughput: {:.1f}'.format(n_nodes / timing))
+
+    @staticmethod
+    def _bench_pyg_homo(dataset, model, d_hidden):
+        # info
+        print('[PYG] {}, {}, d_hidden={}'.format(
+            type(dataset).__name__,
+            model.__name__, d_hidden
+        ))
+
+        # dataset
+        n_epochs = 20
+        graph = dataset[0].to('cuda')
+        n_nodes = graph.num_nodes
+        print('n_nodes:', n_nodes)
+        n_labels = dataset.num_classes
+        print('n_labels:', n_labels)
+        n_features = graph.num_features
+        print('n_features:', n_features)
+
+        # inputs
+        gradient = torch.ones(
+            [n_nodes, n_labels]
+        ).to('cuda')
+        model = model(
+            in_features=n_features,
+            gnn_features=d_hidden,
+            out_features=n_labels
+        ).to('cuda')
+
+        # prewarm
+        y = model(graph)
+        y.backward(gradient=gradient)
+        torch.cuda.synchronize()
+
+        # training
+        timing = None
+        time.sleep(2.0)
+        print('[TRAINING]')
+        with utils.Profiler(n_epochs) as prof:
+            for _ in range(n_epochs):
+                y = model(graph)
                 y.backward(gradient=gradient)
             torch.cuda.synchronize()
             timing = prof.timing() / n_epochs
@@ -517,8 +429,12 @@ class Benchmark(BenchMethods):
 
 def main():
     bench = Benchmark()
+    dataset = pygds.Planetoid(
+        root='.data', name='cora'
+    )
+    bench._bench_pyg_homo(dataset, PyGGCNModel, 16)
     # bench.dataset_info()
-    bench.bench_heterogenous()
+    # bench.bench_heterogenous()
 
 
 if __name__ == "__main__":

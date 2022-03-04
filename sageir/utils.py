@@ -4,7 +4,7 @@ import pstats
 import cProfile
 import dgl as dgl
 import networkx as nx
-from matplotlib import pyplot as plt
+# from matplotlib import pyplot as plt
 
 
 def draw_metapath(graph: dgl.DGLGraph):
