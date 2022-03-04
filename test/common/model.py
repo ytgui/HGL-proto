@@ -108,7 +108,7 @@ class GATModel(nn.Module):
                  in_features: int,
                  gnn_features: int,
                  out_features: int,
-                 n_heads: int = 4):
+                 n_heads: int = 8):
         nn.Module.__init__(self)
         #
         self.i2h = GATLayer(

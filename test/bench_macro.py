@@ -9,7 +9,7 @@ from dgl.data import gnn_benchmark as bench
 from torch_geometric import datasets as pygds
 from common.model import GCNModel, GATModel, RGATModel
 from common.dglmodel import DGLGCNModel, DGLGATModel, DGLRGATModel
-from common.pygmodel import PyGGCNModel
+from common.pygmodel import PyGGCNModel, PyGGATModel
 
 
 class BenchMethods:
@@ -59,8 +59,7 @@ class BenchMethods:
     def _bench_dgl_homo(dataset, model, d_hidden):
         # info
         print('[DGL] {}, {}, d_hidden={}'.format(
-            type(dataset).__name__,
-            model.__name__, d_hidden
+            dataset.name, model.__name__, d_hidden
         ))
 
         # dataset
@@ -71,7 +70,7 @@ class BenchMethods:
         n_labels = dataset.num_classes
         print('n_labels:', n_labels)
         feature = graph.ndata.pop(
-            'feats'
+            'feat'
         ).to('cuda')
         n_features = feature.size(-1)
         print('n_features:', n_features)
@@ -107,8 +106,7 @@ class BenchMethods:
     def _bench_dgl_hetero(dataset, model, d_hidden):
         # info
         print('[DGL] {}, {}, d_hidden={}'.format(
-            type(dataset).__name__,
-            model.__name__, d_hidden
+            dataset.name, model.__name__, d_hidden
         ))
 
         # dataset
@@ -156,8 +154,7 @@ class BenchMethods:
     def _bench_pyg_homo(dataset, model, d_hidden):
         # info
         print('[PYG] {}, {}, d_hidden={}'.format(
-            type(dataset).__name__,
-            model.__name__, d_hidden
+            dataset.name, model.__name__, d_hidden
         ))
 
         # dataset
@@ -354,8 +351,8 @@ class BenchMethods:
 
 class Benchmark(BenchMethods):
     HOM_MODELS = [
-        (DGLGATModel, GATModel),
-        (DGLGCNModel, GCNModel)
+        (PyGGCNModel, DGLGCNModel, GCNModel),
+        (PyGGATModel, DGLGATModel, GATModel),
     ]
     HET_MODELS = [
         (DGLRGATModel, RGATModel)
@@ -402,13 +399,25 @@ class Benchmark(BenchMethods):
             self._check_dataset(dataset)
 
     def bench_homogenous(self):
-        for dataset in self.HOM_DATASETS:
-            dataset = dataset(
-                verbose=False
-            )
-            for dgl_model, sageir_model in \
-                    self.HOM_CMP_MODELS:
+        for name in self.HOM_DATASETS:
+            for pyg_model, dgl_model, sageir_model in \
+                    self.HOM_MODELS:
                 for d_hidden in [16]:
+                    #
+                    dataset = self.PYG_DATASETS[
+                        name
+                    ]()
+                    time.sleep(2.0)
+                    self._bench_pyg_homo(
+                        dataset=dataset,
+                        model=pyg_model,
+                        d_hidden=d_hidden
+                    )
+                    #
+                    dataset = self.DGL_DATASETS[
+                        name
+                    ](verbose=False)
+                    time.sleep(2.0)
                     self._bench_dgl_homo(
                         dataset=dataset,
                         model=dgl_model,
@@ -420,8 +429,6 @@ class Benchmark(BenchMethods):
                         model=sageir_model,
                         d_hidden=d_hidden,
                     )
-                    time.sleep(2.0)
-                    return
 
     def bench_heterogenous(self):
         for dataset in self.HET_DATASETS:
@@ -429,7 +436,7 @@ class Benchmark(BenchMethods):
                 verbose=False
             )
             for dgl_model, sageir_model in \
-                    self.HET_CMP_MODELS:
+                    self.HET_MODELS:
                 for d_hidden in [16]:
                     self._bench_dgl_hetero(
                         dataset=dataset,
@@ -447,8 +454,8 @@ class Benchmark(BenchMethods):
 
 def main():
     benchmark = Benchmark()
-    benchmark.dataset_info()
-    # bench.bench_heterogenous()
+    # benchmark.dataset_info()
+    benchmark.bench_homogenous()
 
 
 if __name__ == "__main__":
