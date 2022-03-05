@@ -9,7 +9,7 @@ from dgl.data import gnn_benchmark as bench
 from torch_geometric import datasets as pygds
 from common.model import GCNModel, GATModel, RGATModel
 from common.dglmodel import DGLGCNModel, DGLGATModel, DGLRGATModel
-from common.pygmodel import PyGGCNModel, PyGGATModel
+from common.pygmodel import PyGGCNModel, PyGGATModel, PyGRGATModel
 
 
 class BenchMethods:
@@ -54,6 +54,105 @@ class BenchMethods:
             print('n_edges:', n_edges)
             avg_degrees = sum(avg_degrees) / len(avg_degrees)
             print('avg_degrees:', avg_degrees)
+
+    @staticmethod
+    def _bench_pyg_homo(dataset, model, d_hidden):
+        # info
+        print('[PYG] {}, {}, d_hidden={}'.format(
+            dataset.name, model.__name__, d_hidden
+        ))
+
+        # dataset
+        n_epochs = 20
+        graph = dataset[0].to('cuda')
+        n_nodes = graph.num_nodes
+        print('n_nodes:', n_nodes)
+        n_labels = dataset.num_classes
+        print('n_labels:', n_labels)
+        n_features = graph.num_features
+        print('n_features:', n_features)
+
+        # inputs
+        gradient = torch.ones(
+            [n_nodes, n_labels]
+        ).to('cuda')
+        model = model(
+            in_features=n_features,
+            gnn_features=d_hidden,
+            out_features=n_labels
+        ).to('cuda')
+
+        # prewarm
+        y = model(graph)
+        y.backward(gradient=gradient)
+        torch.cuda.synchronize()
+
+        # training
+        timing = None
+        time.sleep(2.0)
+        print('[TRAINING]')
+        with utils.Profiler(n_epochs) as prof:
+            for _ in range(n_epochs):
+                y = model(graph)
+                y.backward(gradient=gradient)
+            torch.cuda.synchronize()
+            timing = prof.timing() / n_epochs
+        print('throughput: {:.1f}'.format(n_nodes / timing))
+
+    @staticmethod
+    def _bench_pyg_hetero(dataset, model, d_hidden):
+        # info
+        if hasattr(dataset, 'name'):
+            name = dataset.name
+        else:
+            name = type(dataset).__name__
+        print('[PYG] {}, {}, d_hidden={}'.format(
+            name, model.__name__, d_hidden
+        ))
+
+        # dataset
+        n_epochs = 20
+        graph = dataset[0].to('cuda')
+        n_nodes = 0
+        for _, _, dty in graph.edge_types:
+            n_nodes += graph[dty].num_nodes
+        print('n_nodes:', n_nodes)
+        assert len(graph.node_types) == 1
+        nty = graph.node_types[0]
+        n_labels = torch.max(
+            graph[nty]['train_y']
+        ).item() + 1
+        print('n_labels:', n_labels)
+        edge_dict = graph.edge_index_dict
+
+        # inputs
+        gradient = torch.ones([
+            graph[nty].num_nodes,
+            n_labels
+        ]).to('cuda')
+        model = model(
+            graph=graph,
+            in_features=d_hidden,
+            gnn_features=d_hidden,
+            out_features=n_labels
+        ).to('cuda')
+
+        # prewarm
+        y = model(graph)[nty]
+        y.backward(gradient=gradient)
+        torch.cuda.synchronize()
+
+        # training
+        timing = None
+        time.sleep(2.0)
+        print('[TRAINING]')
+        with utils.Profiler(n_epochs) as prof:
+            for _ in range(n_epochs):
+                y = model(graph)[nty]
+                y.backward(gradient=gradient)
+            torch.cuda.synchronize()
+            timing = prof.timing() / n_epochs
+        print('throughput: {:.1f}'.format(n_nodes / timing))
 
     @staticmethod
     def _bench_dgl_homo(dataset, model, d_hidden):
@@ -145,50 +244,6 @@ class BenchMethods:
         with utils.Profiler(n_epochs) as prof:
             for _ in range(n_epochs):
                 y = model(graph)[category]
-                y.backward(gradient=gradient)
-            torch.cuda.synchronize()
-            timing = prof.timing() / n_epochs
-        print('throughput: {:.1f}'.format(n_nodes / timing))
-
-    @staticmethod
-    def _bench_pyg_homo(dataset, model, d_hidden):
-        # info
-        print('[PYG] {}, {}, d_hidden={}'.format(
-            dataset.name, model.__name__, d_hidden
-        ))
-
-        # dataset
-        n_epochs = 20
-        graph = dataset[0].to('cuda')
-        n_nodes = graph.num_nodes
-        print('n_nodes:', n_nodes)
-        n_labels = dataset.num_classes
-        print('n_labels:', n_labels)
-        n_features = graph.num_features
-        print('n_features:', n_features)
-
-        # inputs
-        gradient = torch.ones(
-            [n_nodes, n_labels]
-        ).to('cuda')
-        model = model(
-            in_features=n_features,
-            gnn_features=d_hidden,
-            out_features=n_labels
-        ).to('cuda')
-
-        # prewarm
-        y = model(graph)
-        y.backward(gradient=gradient)
-        torch.cuda.synchronize()
-
-        # training
-        timing = None
-        time.sleep(2.0)
-        print('[TRAINING]')
-        with utils.Profiler(n_epochs) as prof:
-            for _ in range(n_epochs):
-                y = model(graph)
                 y.backward(gradient=gradient)
             torch.cuda.synchronize()
             timing = prof.timing() / n_epochs
@@ -287,7 +342,6 @@ class BenchMethods:
         print('predict_category:', category)
 
         # inputs
-        n_heads = 2
         gradient = torch.ones([
             dglgraph.num_nodes(category),
             n_labels
@@ -296,8 +350,7 @@ class BenchMethods:
             hgraph=graph,
             in_features=d_hidden,
             gnn_features=d_hidden,
-            out_features=n_labels,
-            n_heads=n_heads
+            out_features=n_labels
         ).to('cuda')
         node_indices = {
             nty: torch.linspace(
@@ -380,10 +433,10 @@ class Benchmark(BenchMethods):
         'cora_full': lambda: pygds.CoraFull(root='.data'),
         'reddit': lambda: pygds.Reddit(root='.data'),
         #
-        'aifb_hetero': lambda: pygds.Reddit(root='.data', name='AIFB'),
-        'mutag_hetero': lambda: pygds.Reddit(root='.data', name='MUTAG'),
-        'bgs_hetero': lambda: pygds.Reddit(root='.data', name='BGS'),
-        'am_hetero': lambda: pygds.Reddit(root='.data', name='AM'),
+        'aifb_hetero': lambda: pygds.Entities(root='.data', name='AIFB', hetero=True),
+        'mutag_hetero': lambda: pygds.Entities(root='.data', name='MUTAG', hetero=True),
+        'bgs_hetero': lambda: pygds.Entities(root='.data', name='BGS', hetero=True),
+        'am_hetero': lambda: pygds.Entities(root='.data', name='AM', hetero=True),
     }
 
     def dataset_info(self):
@@ -455,7 +508,11 @@ class Benchmark(BenchMethods):
 def main():
     benchmark = Benchmark()
     # benchmark.dataset_info()
-    benchmark.bench_homogenous()
+    # benchmark.bench_homogenous()
+    # benchmark.bench_heterogenous()
+    dataset = pygds.Entities(root='.data', name='AIFB', hetero=True)
+    benchmark._bench_pyg_hetero(dataset, PyGRGATModel, 8)
+    a = 0
 
 
 if __name__ == "__main__":
