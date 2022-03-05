@@ -85,6 +85,61 @@ class DGLREmbedding(nn.Module):
         }
 
 
+class DGLRGCNModel(nn.Module):
+    def __init__(self,
+                 g: dgl.DGLHeteroGraph,
+                 in_features: int,
+                 gnn_features: int,
+                 out_features: int):
+        nn.Module.__init__(self)
+        #
+        self.embed = DGLREmbedding(
+            g, embedding_dim=in_features
+        )
+        self.i2h = dglnn.HeteroGraphConv(
+            {
+                ety: dglnn.GraphConv(
+                    in_features, gnn_features,
+                    activation=None, bias=True
+                )
+                for ety in sorted(list(g.etypes))
+            }, aggregate='mean'
+        )
+        self.h2o = dglnn.HeteroGraphConv(
+            {
+                ety: dglnn.GraphConv(
+                    gnn_features, out_features,
+                    activation=None, bias=True
+                )
+                for ety in sorted(list(g.etypes))
+            }, aggregate='mean'
+        )
+        self.activation = nn.Sequential(
+            nn.Dropout(0.5),
+            nn.ReLU(),
+        )
+
+    def forward(self, block):
+        xs = self.embed(block)
+        hs = self.i2h(block, xs)
+        hs = {
+            k: self.activation(h)
+            if h.dim() == 2 else
+            self.activation(
+                torch.mean(h, dim=1)
+            )
+            for k, h in hs.items()
+        }
+        hs = self.h2o(block, hs)
+        hs = {
+            k: h
+            if h.dim() == 2 else
+            torch.mean(h, dim=1)
+            for k, h in hs.items()
+        }
+        return hs
+
+
 class DGLRGATModel(nn.Module):
     def __init__(self,
                  g: dgl.DGLHeteroGraph,
@@ -104,7 +159,7 @@ class DGLRGATModel(nn.Module):
                     activation=None, bias=True
                 )
                 for ety in sorted(list(g.etypes))
-            }, aggregate='sum'
+            }, aggregate='mean'
         )
         self.h2o = dglnn.HeteroGraphConv(
             {
@@ -113,7 +168,7 @@ class DGLRGATModel(nn.Module):
                     activation=None, bias=True
                 )
                 for ety in sorted(list(g.etypes))
-            }, aggregate='sum'
+            }, aggregate='mean'
         )
         self.activation = nn.Sequential(
             nn.Dropout(0.5),

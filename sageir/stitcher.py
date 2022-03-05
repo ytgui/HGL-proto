@@ -98,9 +98,6 @@ class Stitcher:
 
         stitch_idxes = set()
         for spmm_node in spmm_nodes:
-            edge_node = spmm_node.prevs['e']
-            if not isinstance(edge_node, ir.OpFusedSDDMM):
-                raise NotImplementedError
             graph_node = spmm_node.prevs['g']
             splited = graph_node.name.split('.')
             matched_idx = match_rule(
@@ -141,11 +138,14 @@ class Stitcher:
             stitch_keys, stitch_values = [], []
             for spmm_node in stitch_spmms:
                 graph_node = spmm_node.prevs['g']
+                value_node = spmm_node.prevs['x']
+                stitch_values.append(value_node)
+                if 'e' not in spmm_node.prevs:
+                    continue
                 sddmm_node = spmm_node.prevs['e']
                 if not isinstance(sddmm_node, ir.OpFusedSDDMM):
                     raise NotImplementedError
                 sddmm_scheme = sddmm_node.fusion_scheme
-                value_node = spmm_node.prevs['x']
                 query_node = sddmm_node.prevs['q']
                 key_node = sddmm_node.prevs['k']
                 #
@@ -153,26 +153,29 @@ class Stitcher:
                 assert graph_node.size[1] == value_node.size[0]
                 assert graph_node.size[1] == key_node.size[0]
                 stitch_queries.append(query_node)
-                stitch_values.append(value_node)
                 stitch_keys.append(key_node)
             # pack it
-            new_key = ir.OpConcat(xs=stitch_keys, dim=0)
             new_value = ir.OpConcat(xs=stitch_values, dim=0)
-            new_query = ir.OpStack(xs=stitch_queries, dim=0)
-            assert new_query.size[0] == len(stitch_queries)
-            assert new_query.size[1] == new_graph.size[0]
             assert new_value.size[0] == new_graph.size[1]
-            assert new_key.size[0] == new_graph.size[1]
+            new_key, new_query = None, None
+            if stitch_keys and stitch_queries:
+                new_key = ir.OpConcat(xs=stitch_keys, dim=0)
+                new_query = ir.OpStack(xs=stitch_queries, dim=0)
+                assert new_query.size[0] == len(stitch_queries)
+                assert new_query.size[1] == new_graph.size[0]
+                assert new_key.size[0] == new_graph.size[1]
             # new node
-            n_edges = sum([
-                item[-1]
-                for item in stitches
-            ])
-            new_sddmm = ir.OpFusedSDDMM(
-                size=[n_edges, new_key.size[-1]],
-                graph=new_graph, query=new_query,
-                key=new_key, fusion_scheme=sddmm_scheme
-            )
+            new_sddmm = None
+            if stitch_keys and stitch_queries:
+                n_edges = sum([
+                    item[-1]
+                    for item in stitches
+                ])
+                new_sddmm = ir.OpFusedSDDMM(
+                    size=[n_edges, new_key.size[-1]],
+                    graph=new_graph, query=new_query,
+                    key=new_key, fusion_scheme=sddmm_scheme
+                )
             new_spmm = ir.OpFusedSPMM(
                 graph=new_graph,
                 edge=new_sddmm,
@@ -238,7 +241,7 @@ class Stitcher:
         def visit_spmm(root_nodes: list,
                        spmm_nodes=None,
                        depth=0):
-            if depth >= 3:
+            if depth >= 5:
                 return
             if spmm_nodes is None:
                 spmm_nodes = set()

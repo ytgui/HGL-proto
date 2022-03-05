@@ -16,6 +16,9 @@ class GCNLayer(nn.Module):
                 graph: mp.Graph,
                 norm: torch.Tensor,
                 x: Union[torch.Tensor, list]):
+        if isinstance(x, (list, tuple)):
+            assert len(x) == 2
+            x = x[0]
         h = self.fc(x)
         h = h.view(size=[
             -1, 1, h.size(-1)
@@ -69,7 +72,7 @@ class GATLayer(nn.Module):
         self.linear_v = nn.Linear(in_features, n_heads * out_features)
         self.leaky_relu = nn.LeakyReLU(negative_slope=0.2)
 
-    def forward(self, graph: mp.Graph, x: Union[torch.Tensor, list]):
+    def forward(self, graph: mp.Graph, x):
         # different to bert
         if isinstance(x, (list, tuple)):
             assert len(x) == 2
@@ -136,14 +139,22 @@ class HeteroGraphConv(nn.Module):
 
     def forward(self,
                 hgraph: mp.HeteroGraph,
-                xs: dict):
+                xs: dict,
+                norms: dict = None):
         counts = {}
         outputs = {}
         for (sty, ety, dty), graph \
                 in hgraph:
-            res = self.convs[ety](
-                graph, (xs[sty], xs[dty])
-            )
+            if norms:
+                res = self.convs[ety](
+                    graph,
+                    norms[sty, ety, dty],
+                    (xs[sty], xs[dty])
+                )
+            else:
+                res = self.convs[ety](
+                    graph, (xs[sty], xs[dty])
+                )
             if dty not in counts:
                 counts[dty] = 1
             else:
@@ -181,13 +192,57 @@ class REmbedding(nn.Module):
         }
 
 
+class RGCNModel(nn.Module):
+    def __init__(self,
+                 hgraph: mp.HeteroGraph,
+                 in_features: int,
+                 gnn_features: int,
+                 out_features: int):
+        nn.Module.__init__(self)
+        #
+        self.em = REmbedding(
+            hgraph=hgraph,
+            embedding_dim=in_features
+        )
+        self.i2h = HeteroGraphConv({
+            ety: GCNLayer(
+                in_features=in_features,
+                out_features=gnn_features
+            )
+            for ety in hgraph.etypes
+        })
+        self.h2o = HeteroGraphConv({
+            ety: GCNLayer(
+                in_features=gnn_features,
+                out_features=out_features
+            )
+            for ety in hgraph.etypes
+        })
+        self.activation = nn.Sequential(
+            nn.Dropout(0.5),
+            nn.ReLU()
+        )
+
+    def forward(self,
+                hgraph: mp.HeteroGraph,
+                norms: dict, xs: dict):
+        xs = self.em(hgraph, xs)
+        hs = self.i2h(hgraph, xs, norms)
+        hs = {
+            k: self.activation(h)
+            for k, h in hs.items()
+        }
+        hs = self.h2o(hgraph, hs, norms)
+        return hs
+
+
 class RGATModel(nn.Module):
     def __init__(self,
                  hgraph: mp.HeteroGraph,
                  in_features: int,
                  gnn_features: int,
                  out_features: int,
-                 n_heads: int):
+                 n_heads: int = 8):
         nn.Module.__init__(self)
         #
         self.em = REmbedding(

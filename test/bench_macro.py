@@ -7,9 +7,9 @@ from dgl.data import rdf, reddit
 from dgl.data import citation_graph as cit
 from dgl.data import gnn_benchmark as bench
 from torch_geometric import datasets as pygds
-from common.model import GCNModel, GATModel, RGATModel
-from common.dglmodel import DGLGCNModel, DGLGATModel, DGLRGATModel
-from common.pygmodel import PyGGCNModel, PyGGATModel, PyGRGATModel
+from common.model import GCNModel, GATModel, RGCNModel, RGATModel
+from common.dglmodel import DGLGCNModel, DGLGATModel, DGLRGCNModel, DGLRGATModel
+from common.pygmodel import PyGGCNModel, PyGGATModel, PyGRGCNModel, PyGRGATModel
 
 
 class BenchMethods:
@@ -21,17 +21,18 @@ class BenchMethods:
             divider, dataset.name, divider
         ))
         graph: dgl.DGLGraph = dataset[0]
+        print('n_nodes:', graph.num_nodes())
+        #
         if graph.is_homogeneous:
             avg_degrees = torch.mean(
                 graph.in_degrees().type(
                     torch.FloatTensor
                 )
             ).item()
-            print('n_nodes:', graph.num_nodes())
             print('n_edges:', graph.num_edges())
             print('avg_degrees:', avg_degrees)
         else:
-            n_nodes = 0
+            n_rows = 0
             n_edges = 0
             avg_degrees = []
             print(
@@ -48,9 +49,9 @@ class BenchMethods:
                         )
                     ).item()
                 )
-                n_nodes += graph.num_dst_nodes(dty)
+                n_rows += graph.num_dst_nodes(dty)
                 n_edges += graph.num_edges((sty, ety, dty))
-            print('n_nodes:', n_nodes)
+            print('n_rows:', n_rows)
             print('n_edges:', n_edges)
             avg_degrees = sum(avg_degrees) / len(avg_degrees)
             print('avg_degrees:', avg_degrees)
@@ -123,7 +124,6 @@ class BenchMethods:
             graph[nty]['train_y']
         ).item() + 1
         print('n_labels:', n_labels)
-        edge_dict = graph.edge_index_dict
 
         # inputs
         gradient = torch.ones([
@@ -363,6 +363,11 @@ class BenchMethods:
             'hgraph': graph,
             'xs': node_indices
         })
+        if isinstance(model, RGCNModel):
+            kwargs['norms'] = {
+                rel: g.right_norm()
+                for rel, g in graph.hetero_graph.items()
+            }
 
         # optimizer
         mod2ir = sageir.Module2IR()
@@ -408,7 +413,8 @@ class Benchmark(BenchMethods):
         (PyGGATModel, DGLGATModel, GATModel),
     ]
     HET_MODELS = [
-        (DGLRGATModel, RGATModel)
+        (PyGRGCNModel, DGLRGCNModel, RGCNModel),
+        (PyGRGATModel, DGLRGATModel, RGATModel),
     ]
     HOM_DATASETS = [
         'cora_tiny', 'amazon', 'cora_full', 'reddit',
@@ -484,13 +490,23 @@ class Benchmark(BenchMethods):
                     )
 
     def bench_heterogenous(self):
-        for dataset in self.HET_DATASETS:
-            dataset = dataset(
-                verbose=False
-            )
-            for dgl_model, sageir_model in \
+        for name in self.HET_DATASETS:
+            for pyg_model, dgl_model, sageir_model in \
                     self.HET_MODELS:
                 for d_hidden in [16]:
+                    #
+                    dataset = self.PYG_DATASETS[
+                        name
+                    ]()
+                    self._bench_pyg_hetero(
+                        dataset=dataset,
+                        model=pyg_model,
+                        d_hidden=d_hidden
+                    )
+                    #
+                    dataset = self.DGL_DATASETS[
+                        name
+                    ](verbose=False)
                     self._bench_dgl_hetero(
                         dataset=dataset,
                         model=dgl_model,
@@ -509,9 +525,9 @@ def main():
     benchmark = Benchmark()
     # benchmark.dataset_info()
     # benchmark.bench_homogenous()
-    # benchmark.bench_heterogenous()
-    dataset = pygds.Entities(root='.data', name='AIFB', hetero=True)
-    benchmark._bench_pyg_hetero(dataset, PyGRGATModel, 8)
+    benchmark.bench_heterogenous()
+    # dataset = pygds.Entities(root='.data', name='AIFB', hetero=True)
+    # benchmark._bench_pyg_hetero(dataset, PyGRGATModel, 8)
     a = 0
 
 

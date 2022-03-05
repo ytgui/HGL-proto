@@ -219,7 +219,12 @@ class HeteroGraph:
                     torch.IntTensor(
                         adj.indices
                     ).to(graph.device)
-                ]
+                ],
+                right_norm=torch.div(
+                    1.0, graph.in_degrees(
+                        etype=(sty, ety, dty)
+                    )
+                ).unsqueeze(-1)
             )
             hgraph.idx2rel[
                 len(hgraph.idx2rel)

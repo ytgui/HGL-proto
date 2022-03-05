@@ -77,6 +77,47 @@ class PyGREmbedding(nn.Module):
         }
 
 
+class PyGRGCNModel(nn.Module):
+    def __init__(self, graph,
+                 in_features: int,
+                 gnn_features: int,
+                 out_features: int,
+                 n_heads: int = 8):
+        nn.Module.__init__(self)
+        self.em = PyGREmbedding(
+            graph, in_features
+        )
+        self.i2h = pygnn.HeteroConv(
+            {
+                ety: pygnn.GCNConv(
+                    in_features, gnn_features
+                ) for ety in graph.metadata()[1]
+            }, aggr='mean'
+        )
+        self.h2o = pygnn.HeteroConv(
+            {
+                ety: pygnn.GCNConv(
+                    gnn_features, out_features
+                ) for ety in graph.metadata()[1]
+            }, aggr='mean'
+        )
+        self.activation = nn.Sequential(
+            nn.Dropout(0.5),
+            nn.ReLU(),
+        )
+
+    def forward(self, data):
+        x_dict = self.em(data)
+        edge_sict = data.edge_index_dict
+        x_dict = self.i2h(x_dict, edge_sict)
+        x_dict = {
+            k: self.activation(v)
+            for k, v in x_dict.items()
+        }
+        x_dict = self.h2o(x_dict, edge_sict)
+        return x_dict
+
+
 class PyGRGATModel(nn.Module):
     def __init__(self, graph,
                  in_features: int,
