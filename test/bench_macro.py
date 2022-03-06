@@ -68,6 +68,8 @@ class BenchMethods:
         graph = dataset[0].to('cuda')
         n_nodes = graph.num_nodes
         print('n_nodes:', n_nodes)
+        n_edges = graph.num_edges
+        print('n_edges:', n_edges)
         n_labels = dataset.num_classes
         print('n_labels:', n_labels)
         n_features = graph.num_features
@@ -98,7 +100,7 @@ class BenchMethods:
                 y.backward(gradient=gradient)
             torch.cuda.synchronize()
             timing = prof.timing() / n_epochs
-        print('throughput: {:.1f}'.format(n_nodes / timing))
+        print('throughput: {:.1f}'.format(n_edges / timing))
 
     @staticmethod
     def _bench_pyg_hetero(dataset, model, d_hidden):
@@ -114,10 +116,8 @@ class BenchMethods:
         # dataset
         n_epochs = 20
         graph = dataset[0].to('cuda')
-        n_nodes = 0
-        for _, _, dty in graph.edge_types:
-            n_nodes += graph[dty].num_nodes
-        print('n_nodes:', n_nodes)
+        n_edges = graph.num_edges
+        print('n_edges:', n_edges)
         assert len(graph.node_types) == 1
         nty = graph.node_types[0]
         n_labels = torch.max(
@@ -152,7 +152,7 @@ class BenchMethods:
                 y.backward(gradient=gradient)
             torch.cuda.synchronize()
             timing = prof.timing() / n_epochs
-        print('throughput: {:.1f}'.format(n_nodes / timing))
+        print('throughput: {:.1f}'.format(n_edges / timing))
 
     @staticmethod
     def _bench_dgl_homo(dataset, model, d_hidden):
@@ -166,6 +166,8 @@ class BenchMethods:
         graph = dataset[0].to('cuda')
         n_nodes = graph.num_nodes()
         print('n_nodes:', n_nodes)
+        n_edges = graph.num_edges()
+        print('n_edges:', n_edges)
         n_labels = dataset.num_classes
         print('n_labels:', n_labels)
         feature = graph.ndata.pop(
@@ -199,7 +201,7 @@ class BenchMethods:
                 y.backward(gradient=gradient)
             torch.cuda.synchronize()
             timing = prof.timing() / n_epochs
-        print('throughput: {:.1f}'.format(n_nodes / timing))
+        print('throughput: {:.1f}'.format(n_edges / timing))
 
     @staticmethod
     def _bench_dgl_hetero(dataset, model, d_hidden):
@@ -211,10 +213,8 @@ class BenchMethods:
         # dataset
         n_epochs = 20
         graph = dataset[0].to('cuda')
-        n_nodes = 0
-        for _, _, dty in graph.canonical_etypes:
-            n_nodes += graph.num_dst_nodes(dty)
-        print('n_nodes:', n_nodes)
+        n_edges = graph.num_edges()
+        print('n_edges:', n_edges)
         n_labels = dataset.num_classes
         print('n_labels:', n_labels)
         category = dataset.predict_category
@@ -247,7 +247,7 @@ class BenchMethods:
                 y.backward(gradient=gradient)
             torch.cuda.synchronize()
             timing = prof.timing() / n_epochs
-        print('throughput: {:.1f}'.format(n_nodes / timing))
+        print('throughput: {:.1f}'.format(n_edges / timing))
 
     @staticmethod
     def _bench_sageir_homo(dataset, model, d_hidden):
@@ -263,6 +263,8 @@ class BenchMethods:
         graph = mp.from_dglgraph(dglgraph)
         n_nodes = dglgraph.num_nodes()
         print('n_nodes:', n_nodes)
+        n_edges = dglgraph.num_edges()
+        print('n_edges:', n_edges)
         n_labels = dataset.num_classes
         print('n_labels:', n_labels)
         feature = dglgraph.ndata.pop('feat')
@@ -318,7 +320,7 @@ class BenchMethods:
                 y.backward(gradient=gradient)
             torch.cuda.synchronize()
             timing = prof.timing() / n_epochs
-        print('throughput: {:.1f}'.format(n_nodes / timing))
+        print('throughput: {:.1f}'.format(n_edges / timing))
 
     @staticmethod
     def _bench_sageir_hetero(dataset, model, d_hidden):
@@ -332,10 +334,8 @@ class BenchMethods:
         n_epochs = 20
         dglgraph = dataset[0].to('cuda')
         graph = mp.from_dglgraph(dglgraph)
-        n_nodes = 0
-        for _, _, dty in dglgraph.canonical_etypes:
-            n_nodes += dglgraph.num_dst_nodes(dty)
-        print('n_nodes:', n_nodes)
+        n_edges = dglgraph.num_edges()
+        print('n_edges:', n_edges)
         n_labels = dataset.num_classes
         print('n_labels:', n_labels)
         category = dataset.predict_category
@@ -404,7 +404,7 @@ class BenchMethods:
                 y.backward(gradient=gradient)
             torch.cuda.synchronize()
             timing = prof.timing() / n_epochs
-        print('throughput: {:.1f}'.format(n_nodes / timing))
+        print('throughput: {:.1f}'.format(n_edges / timing))
 
 
 class Benchmark(BenchMethods):
@@ -488,6 +488,7 @@ class Benchmark(BenchMethods):
                         model=sageir_model,
                         d_hidden=d_hidden,
                     )
+                    return
 
     def bench_heterogenous(self):
         for name in self.HET_DATASETS:
@@ -519,6 +520,7 @@ class Benchmark(BenchMethods):
                         d_hidden=d_hidden,
                     )
                     time.sleep(2.0)
+                    return
 
 
 def main():
