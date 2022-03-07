@@ -150,7 +150,7 @@ class HeteroGraphConv(nn.Module):
             if norms:
                 res = self.convs[ety](
                     graph,
-                    norms[sty, ety, dty],
+                    norms[str((sty, ety, dty))],
                     (xs[sty], xs[dty])
                 )
             else:

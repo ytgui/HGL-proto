@@ -1,4 +1,3 @@
-import gc
 import time
 import torch
 import sageir
@@ -8,10 +7,13 @@ from sageir import mp, utils
 from dgl.data import rdf, reddit
 from dgl.data import citation_graph as cit
 from dgl.data import gnn_benchmark as bench
-from torch_geometric import datasets as pygds
 from common.model import GCNModel, GATModel, RGCNModel, RGATModel
 from common.dglmodel import DGLGCNModel, DGLGATModel, DGLRGCNModel, DGLRGATModel
-from common.pygmodel import PyGGCNModel, PyGGATModel, PyGRGCNModel, PyGRGATModel
+try:
+    from torch_geometric import datasets as pygds
+    from common.pygmodel import PyGGCNModel, PyGGATModel, PyGRGCNModel, PyGRGATModel
+except ImportError as e:
+    print('PyG not imported')
 
 torch.backends.cudnn.allow_tf32 = False
 torch.backends.cuda.matmul.allow_tf32 = False
@@ -374,7 +376,7 @@ class BenchMethods:
         })
         if isinstance(model, RGCNModel):
             kwargs['norms'] = {
-                rel: g.right_norm()
+                str(rel): g.right_norm()
                 for rel, g in graph.hetero_graph.items()
             }
 
@@ -572,7 +574,10 @@ def main():
     parser.add_argument('--model', type=str)
     parser.add_argument('--dataset', type=str)
     parser.add_argument('--d_hidden', type=int)
-    args = parser.parse_args()
+    # args = parser.parse_args([
+    #     '--lib=sageir', '--model=rgcn',
+    #     '--dataset=mutag_hetero', '--d_hidden=32'
+    # ])
 
     #
     benchmark = Benchmark()
