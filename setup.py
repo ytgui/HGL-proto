@@ -27,16 +27,6 @@ class TestCommand(Command):
                 break
 
 
-"""
-            libraries=[
-                'cublas'
-            ],
-            library_dirs=[
-                '/usr/local/cuda-11.4/targets/x86_64-linux/lib'
-            ]
-"""
-
-
 setup(
     name='graph_ext',
     ext_modules=[
@@ -47,9 +37,6 @@ setup(
                 'src/fc_cuda.cu',
                 'src/spmm_cuda.cu',
                 'src/sddmm_cuda.cu',
-            ],
-            include_dirs=[
-                'include'
             ]
         )
     ],

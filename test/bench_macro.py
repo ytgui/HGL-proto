@@ -1,6 +1,8 @@
+import gc
 import time
 import torch
 import sageir
+import argparse
 import dgl as dgl
 from sageir import mp, utils
 from dgl.data import rdf, reddit
@@ -10,6 +12,9 @@ from torch_geometric import datasets as pygds
 from common.model import GCNModel, GATModel, RGCNModel, RGATModel
 from common.dglmodel import DGLGCNModel, DGLGATModel, DGLRGCNModel, DGLRGATModel
 from common.pygmodel import PyGGCNModel, PyGGATModel, PyGRGCNModel, PyGRGATModel
+
+torch.backends.cudnn.allow_tf32 = False
+torch.backends.cuda.matmul.allow_tf32 = False
 
 
 class BenchMethods:
@@ -59,8 +64,12 @@ class BenchMethods:
     @staticmethod
     def _bench_pyg_homo(dataset, model, d_hidden):
         # info
+        if hasattr(dataset, 'name'):
+            name = dataset.name
+        else:
+            name = type(dataset).__name__
         print('[PYG] {}, {}, d_hidden={}'.format(
-            dataset.name, model.__name__, d_hidden
+            name, model.__name__, d_hidden
         ))
 
         # dataset
@@ -457,80 +466,130 @@ class Benchmark(BenchMethods):
             ](verbose=False)
             self._check_dataset(dataset)
 
-    def bench_homogenous(self):
-        for name in self.HOM_DATASETS:
-            for pyg_model, dgl_model, sageir_model in \
-                    self.HOM_MODELS:
-                for d_hidden in [16]:
-                    #
-                    dataset = self.PYG_DATASETS[
-                        name
-                    ]()
-                    time.sleep(2.0)
-                    self._bench_pyg_homo(
-                        dataset=dataset,
-                        model=pyg_model,
-                        d_hidden=d_hidden
-                    )
-                    #
-                    dataset = self.DGL_DATASETS[
-                        name
-                    ](verbose=False)
-                    time.sleep(2.0)
-                    self._bench_dgl_homo(
-                        dataset=dataset,
-                        model=dgl_model,
-                        d_hidden=d_hidden,
-                    )
-                    time.sleep(2.0)
-                    self._bench_sageir_homo(
-                        dataset=dataset,
-                        model=sageir_model,
-                        d_hidden=d_hidden,
-                    )
-                    return
+    def bench_homogenous(self, lib, model, dataset, d_hidden):
+        if lib == 'pyg':
+            dataset = self.PYG_DATASETS[
+                dataset
+            ]()
+            if model == 'gcn':
+                model = PyGGCNModel
+            elif model == 'gat':
+                model = PyGGATModel
+            else:
+                raise RuntimeError
+            self._bench_pyg_homo(
+                dataset=dataset,
+                model=model,
+                d_hidden=d_hidden
+            )
+        elif lib == 'dgl':
+            dataset = self.DGL_DATASETS[
+                dataset
+            ]()
+            if model == 'gcn':
+                model = DGLGCNModel
+            elif model == 'gat':
+                model = DGLGATModel
+            else:
+                raise RuntimeError
+            self._bench_dgl_homo(
+                dataset=dataset,
+                model=model,
+                d_hidden=d_hidden
+            )
+        elif lib == 'sageir':
+            dataset = self.DGL_DATASETS[
+                dataset
+            ]()
+            if model == 'gcn':
+                model = GCNModel
+            elif model == 'gat':
+                model = GATModel
+            else:
+                raise RuntimeError
+            self._bench_sageir_homo(
+                dataset=dataset,
+                model=model,
+                d_hidden=d_hidden
+            )
+        else:
+            raise RuntimeError
 
-    def bench_heterogenous(self):
-        for name in self.HET_DATASETS:
-            for pyg_model, dgl_model, sageir_model in \
-                    self.HET_MODELS:
-                for d_hidden in [16]:
-                    #
-                    dataset = self.PYG_DATASETS[
-                        name
-                    ]()
-                    self._bench_pyg_hetero(
-                        dataset=dataset,
-                        model=pyg_model,
-                        d_hidden=d_hidden
-                    )
-                    #
-                    dataset = self.DGL_DATASETS[
-                        name
-                    ](verbose=False)
-                    self._bench_dgl_hetero(
-                        dataset=dataset,
-                        model=dgl_model,
-                        d_hidden=d_hidden,
-                    )
-                    time.sleep(2.0)
-                    self._bench_sageir_hetero(
-                        dataset=dataset,
-                        model=sageir_model,
-                        d_hidden=d_hidden,
-                    )
-                    time.sleep(2.0)
-                    return
+    def bench_heterogenous(self, lib, model, dataset, d_hidden):
+        if lib == 'pyg':
+            dataset = self.PYG_DATASETS[
+                dataset
+            ]()
+            if model == 'rgcn':
+                model = PyGRGCNModel
+            elif model == 'rgat':
+                model = PyGRGATModel
+            else:
+                raise RuntimeError
+            self._bench_pyg_hetero(
+                dataset=dataset,
+                model=model,
+                d_hidden=d_hidden
+            )
+        elif lib == 'dgl':
+            dataset = self.DGL_DATASETS[
+                dataset
+            ]()
+            if model == 'rgcn':
+                model = DGLRGCNModel
+            elif model == 'rgat':
+                model = DGLRGATModel
+            else:
+                raise RuntimeError
+            self._bench_dgl_hetero(
+                dataset=dataset,
+                model=model,
+                d_hidden=d_hidden
+            )
+        elif lib == 'sageir':
+            dataset = self.DGL_DATASETS[
+                dataset
+            ]()
+            if model == 'rgcn':
+                model = RGCNModel
+            elif model == 'rgat':
+                model = RGATModel
+            else:
+                raise RuntimeError
+            self._bench_sageir_hetero(
+                dataset=dataset,
+                model=model,
+                d_hidden=d_hidden
+            )
+        else:
+            raise RuntimeError
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--info', action='store_true')
+    parser.add_argument('--lib', type=str)
+    parser.add_argument('--model', type=str)
+    parser.add_argument('--dataset', type=str)
+    parser.add_argument('--d_hidden', type=int)
+    args = parser.parse_args()
+
+    #
     benchmark = Benchmark()
-    # benchmark.dataset_info()
-    # benchmark.bench_homogenous()
-    benchmark.bench_heterogenous()
-    # dataset = pygds.Entities(root='.data', name='AIFB', hetero=True)
-    # benchmark._bench_pyg_hetero(dataset, PyGRGATModel, 8)
-    a = 0
+    if args.info:
+        benchmark.dataset_info()
+        return
+
+    if args.model.startswith('r'):
+        benchmark.bench_heterogenous(
+            args.lib, args.model,
+            args.dataset, args.d_hidden
+        )
+    else:
+        benchmark.bench_homogenous(
+            args.lib, args.model,
+            args.dataset, args.d_hidden
+        )
 
 
 if __name__ == "__main__":

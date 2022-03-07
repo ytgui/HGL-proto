@@ -12,11 +12,13 @@ class DGLGCNModel(nn.Module):
         nn.Module.__init__(self)
         self.i2h = dglnn.GraphConv(
             in_features, gnn_features,
-            norm='right', bias=True
+            norm='right', bias=True,
+            allow_zero_in_degree=True
         )
         self.h2o = dglnn.GraphConv(
             gnn_features, out_features,
-            norm='right', bias=True
+            norm='right', bias=True,
+            allow_zero_in_degree=True
         )
         self.activation = nn.Sequential(
             nn.Dropout(0.5),
@@ -38,12 +40,14 @@ class DGLGATModel(nn.Module):
                  n_heads: int = 8):
         nn.Module.__init__(self)
         self.i2h = dglnn.GATConv(
-            in_features, gnn_features, n_heads,
-            activation=None, bias=True
+            in_features, gnn_features // n_heads,
+            n_heads, activation=None, bias=True,
+            allow_zero_in_degree=True
         )
         self.h2o = dglnn.GATConv(
-            gnn_features, out_features, n_heads,
-            activation=None, bias=True
+            gnn_features // n_heads, out_features,
+            n_heads, activation=None, bias=True,
+            allow_zero_in_degree=True
         )
         self.activation = nn.Sequential(
             nn.Dropout(0.5),
@@ -100,7 +104,8 @@ class DGLRGCNModel(nn.Module):
             {
                 ety: dglnn.GraphConv(
                     in_features, gnn_features,
-                    activation=None, bias=True
+                    activation=None, bias=True,
+                    allow_zero_in_degree=True
                 )
                 for ety in sorted(list(g.etypes))
             }, aggregate='mean'
@@ -109,7 +114,8 @@ class DGLRGCNModel(nn.Module):
             {
                 ety: dglnn.GraphConv(
                     gnn_features, out_features,
-                    activation=None, bias=True
+                    activation=None, bias=True,
+                    allow_zero_in_degree=True
                 )
                 for ety in sorted(list(g.etypes))
             }, aggregate='mean'
@@ -155,8 +161,9 @@ class DGLRGATModel(nn.Module):
         self.i2h = dglnn.HeteroGraphConv(
             {
                 ety: dglnn.GATConv(
-                    in_features, gnn_features, n_heads,
-                    activation=None, bias=True
+                    in_features, gnn_features // n_heads,
+                    n_heads, activation=None, bias=True,
+                    allow_zero_in_degree=True
                 )
                 for ety in sorted(list(g.etypes))
             }, aggregate='mean'
@@ -164,8 +171,9 @@ class DGLRGATModel(nn.Module):
         self.h2o = dglnn.HeteroGraphConv(
             {
                 ety: dglnn.GATConv(
-                    gnn_features, out_features, n_heads,
-                    activation=None, bias=True
+                    gnn_features // n_heads, out_features,
+                    n_heads, activation=None, bias=True,
+                    allow_zero_in_degree=True
                 )
                 for ety in sorted(list(g.etypes))
             }, aggregate='mean'

@@ -4,6 +4,9 @@ from torch import nn
 from sageir import block, sparse, bundle, convert
 from tqdm import tqdm
 
+torch.backends.cudnn.allow_tf32 = False
+torch.backends.cuda.matmul.allow_tf32 = False
+
 
 def check_gspmm():
     density = 0.02
