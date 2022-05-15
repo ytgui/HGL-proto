@@ -115,11 +115,11 @@ class GATModel(nn.Module):
         nn.Module.__init__(self)
         #
         self.i2h = GATLayer(
-            in_features, gnn_features // n_heads,
+            in_features, gnn_features,
             n_heads=n_heads
         )
         self.h2o = GATLayer(
-            gnn_features // n_heads, out_features,
+            gnn_features, out_features,
             n_heads=n_heads
         )
         self.activation = nn.Sequential(
@@ -254,14 +254,14 @@ class RGATModel(nn.Module):
         self.i2h = HeteroGraphConv({
             ety: GATLayer(
                 in_features=in_features,
-                out_features=gnn_features // n_heads,
+                out_features=gnn_features,
                 n_heads=n_heads
             )
             for ety in hgraph.etypes
         })
         self.h2o = HeteroGraphConv({
             ety: GATLayer(
-                in_features=gnn_features // n_heads,
+                in_features=gnn_features,
                 out_features=out_features,
                 n_heads=n_heads
             )

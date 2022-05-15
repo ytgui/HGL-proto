@@ -36,11 +36,11 @@ class PyGGATModel(nn.Module):
                  n_heads: int = 8):
         nn.Module.__init__(self)
         self.i2h = pygnn.GATConv(
-            in_features, gnn_features // n_heads,
+            in_features, gnn_features,
             n_heads, concat=False
         )
         self.h2o = pygnn.GATConv(
-            gnn_features // n_heads, out_features,
+            gnn_features, out_features,
             n_heads, concat=False
         )
         self.activation = nn.Sequential(
@@ -131,7 +131,7 @@ class PyGRGATModel(nn.Module):
         self.i2h = pygnn.HeteroConv(
             {
                 ety: pygnn.GATConv(
-                    in_features, gnn_features // n_heads,
+                    in_features, gnn_features,
                     n_heads, concat=False
                 ) for ety in graph.metadata()[1]
             }, aggr='mean'
@@ -139,7 +139,7 @@ class PyGRGATModel(nn.Module):
         self.h2o = pygnn.HeteroConv(
             {
                 ety: pygnn.GATConv(
-                    gnn_features // n_heads, out_features,
+                    gnn_features, out_features,
                     n_heads, concat=False
                 ) for ety in graph.metadata()[1]
             }, aggr='mean'

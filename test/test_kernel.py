@@ -358,7 +358,7 @@ def check_stitch():
 
 
 def test():
-    for _ in tqdm(range(64)):
+    for _ in tqdm(range(16)):
         check_gspmm()
         check_gsddmm()
         check_gemm()

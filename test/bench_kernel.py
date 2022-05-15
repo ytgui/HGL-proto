@@ -1,25 +1,46 @@
 import time
 import torch
 from torch import nn
-from sageir import mp, sparse, bundle
-from dgl.data import CoraFullDataset
+from sageir import mp, sparse, bundle, convert, block
+from dgl.data import CoraGraphDataset, CoraFullDataset, AmazonCoBuyPhotoDataset
 
 
 def bench_gspmm():
-    dataset = CoraFullDataset(
-        verbose=False
-    )
-    dglgraph = dataset[0].to('cuda')
-    graph = mp.from_dglgraph(dglgraph)
-    n_nodes = dglgraph.num_nodes()
-
-    # inputs
+    density = 0.001
+    n_src = 2048
+    n_dst = 2048
+    n_heads = 1
     n_features = 16
+
+    #
+    adj_adjacency = None
+    while True:
+        dense_raw = torch.rand(
+            size=[n_dst, n_src]
+        )
+        adj_adjacency = torch.where(
+            dense_raw < density, 1.0, 0.0
+        )
+        if adj_adjacency.max() != 0.0:
+            break
+    indptr, indices = convert.to_csr(
+        adj_adjacency
+    )[0]
+
+    #
     feature = torch.randn(
-        size=[n_nodes, 1, n_features],
+        size=[n_src, 1, n_features],
         requires_grad=True
     ).to('cuda')
     gradient = torch.ones_like(feature)
+    values = torch.randn(
+        [indices.size(0), n_heads]
+    ).to('cuda')
+    values.requires_grad = True
+    blk = block.Block(
+        size=[n_dst, n_src],
+        adj=[indptr, indices]
+    ).to('cuda')
     torch.cuda.synchronize()
 
     #
@@ -28,7 +49,7 @@ def bench_gspmm():
     for _ in range(100):
         before = time.time()
         y = sparse.gspmm(
-            block=graph.blk,
+            block=blk,
             edge=None, x=feature
         )
         torch.cuda.synchronize()
@@ -40,8 +61,8 @@ def bench_gspmm():
         backward.append(time.time() - before)
     forward = sorted(forward)[5:-5]
     backward = sorted(backward)[5:-5]
-    print('forward: {:.3f}, backward: {:.3f}'.format(
-        sum(forward), sum(backward)
+    print('forward: {:.3f}, backward: {:.3f}, slowdown: {:.3f}'.format(
+        sum(forward), sum(backward), sum(backward) / sum(forward)
     ))
 
 
@@ -89,7 +110,7 @@ def bench_bundle():
 
 
 def main():
-    bench_bundle()
+    bench_gspmm()
 
 
 if __name__ == "__main__":

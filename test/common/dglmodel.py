@@ -40,12 +40,12 @@ class DGLGATModel(nn.Module):
                  n_heads: int = 8):
         nn.Module.__init__(self)
         self.i2h = dglnn.GATConv(
-            in_features, gnn_features // n_heads,
+            in_features, gnn_features,
             n_heads, activation=None, bias=True,
             allow_zero_in_degree=True
         )
         self.h2o = dglnn.GATConv(
-            gnn_features // n_heads, out_features,
+            gnn_features, out_features,
             n_heads, activation=None, bias=True,
             allow_zero_in_degree=True
         )
@@ -161,7 +161,7 @@ class DGLRGATModel(nn.Module):
         self.i2h = dglnn.HeteroGraphConv(
             {
                 ety: dglnn.GATConv(
-                    in_features, gnn_features // n_heads,
+                    in_features, gnn_features,
                     n_heads, activation=None, bias=True,
                     allow_zero_in_degree=True
                 )
@@ -171,7 +171,7 @@ class DGLRGATModel(nn.Module):
         self.h2o = dglnn.HeteroGraphConv(
             {
                 ety: dglnn.GATConv(
-                    gnn_features // n_heads, out_features,
+                    gnn_features, out_features,
                     n_heads, activation=None, bias=True,
                     allow_zero_in_degree=True
                 )

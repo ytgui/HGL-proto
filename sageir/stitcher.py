@@ -281,7 +281,9 @@ class Stitcher:
                 new_hgraph=new_hgraph
             )
             new_accum = None
-            if len(stitched_node) == 1:
+            if len(stitched_node) == 0:
+                continue
+            elif len(stitched_node) == 1:
                 new_accum = stitched_node[0]
             elif len(stitched_node) == 2:
                 new_accum = ir.OpAdd(

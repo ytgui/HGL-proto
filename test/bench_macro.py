@@ -10,6 +10,8 @@ from dgl.data import gnn_benchmark as bench
 from common.model import GCNModel, GATModel, RGCNModel, RGATModel
 from common.dglmodel import DGLGCNModel, DGLGATModel, DGLRGCNModel, DGLRGATModel
 try:
+    import torch_geometric as pyg
+    from torch_geometric import loader as pygld
     from torch_geometric import datasets as pygds
     from common.pygmodel import PyGGCNModel, PyGGATModel, PyGRGCNModel, PyGRGATModel
 except ImportError as e:
@@ -42,6 +44,7 @@ class BenchMethods:
             n_rows = 0
             n_edges = 0
             avg_degrees = []
+            print('node-types:', len(graph.ntypes))
             print(
                 'meta-paths:',
                 len(graph.canonical_etypes)
@@ -76,7 +79,17 @@ class BenchMethods:
 
         # dataset
         n_epochs = 20
-        graph = dataset[0].to('cuda')
+        graph = dataset[0]
+        if graph.num_edges > 128 * 1024:
+            n_nodes = graph.num_nodes
+            nids = torch.randperm(n_nodes // 16)
+            sampler = pygld.NeighborLoader(
+                graph, num_neighbors=[64],
+                input_nodes=nids, batch_size=n_nodes // 16
+            )
+            graph = next(iter(sampler))
+            print('graph is too large, sample 1/16 of its nodes')
+        graph = graph.to('cuda')
         n_nodes = graph.num_nodes
         print('n_nodes:', n_nodes)
         n_edges = graph.num_edges
@@ -126,11 +139,26 @@ class BenchMethods:
 
         # dataset
         n_epochs = 20
-        graph = dataset[0].to('cuda')
-        n_edges = graph.num_edges
-        print('n_edges:', n_edges)
+        graph = dataset[0]
         assert len(graph.node_types) == 1
         nty = graph.node_types[0]
+        if graph.num_edges > 128 * 1024:
+            sampler = pygld.NeighborLoader(
+                graph,
+                num_neighbors={
+                    rel: [64]
+                    for rel in graph.edge_types
+                },
+                input_nodes=nty,
+                batch_size=graph.num_nodes // 16
+            )
+            graph = next(iter(sampler))
+            print('graph is too large, sample 1/16 of its nodes')
+        graph = graph.to('cuda')
+        n_edges = graph.num_edges
+        print('n_edges:', n_edges)
+        n_nodes = graph.num_nodes
+        print('n_nodes:', n_nodes)
         n_labels = torch.max(
             graph[nty]['train_y']
         ).item() + 1
@@ -174,7 +202,15 @@ class BenchMethods:
 
         # dataset
         n_epochs = 20
-        graph = dataset[0].to('cuda')
+        graph = dataset[0]
+        if graph.num_edges() > 128 * 1024:
+            n_nodes = graph.num_nodes()
+            nids = torch.randperm(n_nodes // 16)
+            graph = dgl.sampling.sample_neighbors(
+                g=graph, nodes=nids, fanout=64
+            )
+            print('graph is too large, sample 1/16 of its nodes')
+        graph = graph.to('cuda')
         n_nodes = graph.num_nodes()
         print('n_nodes:', n_nodes)
         n_edges = graph.num_edges()
@@ -223,7 +259,19 @@ class BenchMethods:
 
         # dataset
         n_epochs = 20
-        graph = dataset[0].to('cuda')
+        graph = dataset[0]
+        if graph.num_edges() > 128 * 1024:
+            nids = {
+                nty: torch.randperm(
+                    graph.num_nodes(nty) // 16
+                )
+                for nty in graph.ntypes
+            }
+            graph = dgl.sampling.sample_neighbors(
+                g=graph, nodes=nids, fanout=64
+            )
+            print('graph is too large, sample 1/16 of its nodes')
+        graph = graph.to('cuda')
         n_edges = graph.num_edges()
         print('n_edges:', n_edges)
         n_labels = dataset.num_classes
@@ -270,7 +318,15 @@ class BenchMethods:
 
         # dataset
         n_epochs = 20
-        dglgraph = dataset[0].to('cuda')
+        dglgraph = dataset[0]
+        if dglgraph.num_edges() > 128 * 1024:
+            n_nodes = dglgraph.num_nodes()
+            nids = torch.randperm(n_nodes // 16)
+            dglgraph = dgl.sampling.sample_neighbors(
+                g=dglgraph, nodes=nids, fanout=64
+            )
+            print('graph is too large, sample 1/16 of its nodes')
+        dglgraph = dglgraph.to('cuda')
         graph = mp.from_dglgraph(dglgraph)
         n_nodes = dglgraph.num_nodes()
         print('n_nodes:', n_nodes)
@@ -343,7 +399,19 @@ class BenchMethods:
 
         # dataset
         n_epochs = 20
-        dglgraph = dataset[0].to('cuda')
+        dglgraph = dataset[0]
+        if dglgraph.num_edges() > 128 * 1024:
+            nids = {
+                nty: torch.randperm(
+                    dglgraph.num_nodes(nty) // 16
+                )
+                for nty in dglgraph.ntypes
+            }
+            dglgraph = dgl.sampling.sample_neighbors(
+                g=dglgraph, nodes=nids, fanout=64
+            )
+            print('graph is too large, sample 1/16 of its nodes')
+        dglgraph = dglgraph.to('cuda')
         graph = mp.from_dglgraph(dglgraph)
         n_edges = dglgraph.num_edges()
         print('n_edges:', n_edges)
@@ -574,10 +642,8 @@ def main():
     parser.add_argument('--model', type=str)
     parser.add_argument('--dataset', type=str)
     parser.add_argument('--d_hidden', type=int)
-    # args = parser.parse_args([
-    #     '--lib=sageir', '--model=rgcn',
-    #     '--dataset=mutag_hetero', '--d_hidden=32'
-    # ])
+    # args = parser.parse_args()
+    args = parser.parse_args(['--info'])
 
     #
     benchmark = Benchmark()

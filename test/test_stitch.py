@@ -35,7 +35,7 @@ def check_stitch_gcn():
         'hgraph': graph,
         'xs': node_indices,
         'norms': {
-            rel: g.right_norm()
+            str(rel): g.right_norm()
             for rel, g in graph.hetero_graph.items()
         }
     })
