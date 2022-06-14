@@ -567,7 +567,7 @@ class Benchmark(BenchMethods):
                 model=model,
                 d_hidden=d_hidden
             )
-        elif lib == 'sageir':
+        elif lib == 'hgl':
             dataset = self.DGL_DATASETS[
                 dataset
             ]()
@@ -616,7 +616,7 @@ class Benchmark(BenchMethods):
                 model=model,
                 d_hidden=d_hidden
             )
-        elif lib == 'sageir':
+        elif lib == 'hgl':
             dataset = self.DGL_DATASETS[
                 dataset
             ]()
