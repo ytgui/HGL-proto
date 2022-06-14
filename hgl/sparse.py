@@ -1,6 +1,6 @@
 import torch
 import graph_ext
-from sageir import block
+from hgl import block
 from torch import autograd
 
 
@@ -88,4 +88,33 @@ def fused_gsddmm(block: block.Block,
         query = query.unsqueeze(0)
     return GSDDMMFunction.apply(
         block.adj_sparse, query, key
+    )
+
+
+class HFUSEDFunction(autograd.Function):
+    @staticmethod
+    def forward(ctx, spmm_sparse, spmm_values, spmm_x,
+                sddmm_sparse, sddmm_query, sddmm_key):
+        spmm_out, attn_values = graph_ext.hfused_forward(
+            spmm_values, spmm_sparse[0], spmm_sparse[1], spmm_x,
+            sddmm_sparse[0], sddmm_sparse[1], sddmm_query, sddmm_key
+        )
+        #
+        ctx.spmm_sparse = spmm_sparse
+        ctx.sddmm_sparse = sddmm_sparse
+        ctx.save_for_backward(sddmm_query, sddmm_key)
+        return spmm_out, attn_values
+
+    @staticmethod
+    def backward(ctx, grad_out):
+        raise NotImplementedError
+
+
+def hfused_spddmm(spmm_block: block.Block, spmm_values, spmm_x,
+                  sddmm_block: block.Block, sddmm_query, sddmm_key):
+    if sddmm_query.dim() == 2:
+        sddmm_query = sddmm_query.unsqueeze(0)
+    return HFUSEDFunction.apply(
+        spmm_block.adj_sparse, spmm_values, spmm_x,
+        sddmm_block.adj_sparse, sddmm_query, sddmm_key
     )

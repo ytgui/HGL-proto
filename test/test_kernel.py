@@ -1,31 +1,37 @@
 import torch
 import random
 from torch import nn
-from sageir import block, sparse, bundle, convert
+from hgl import block, sparse, bundle, convert
 from tqdm import tqdm
 
 torch.backends.cudnn.allow_tf32 = False
 torch.backends.cuda.matmul.allow_tf32 = False
 
 
-def check_gspmm():
-    density = 0.02
-    n_src = random.randint(1, 512)
-    n_dst = random.randint(1, 512)
-    n_heads = random.randint(1, 32)
-    n_features = random.randint(1, 256)
-
-    #
+def rand_adjacency(n_rows, n_cols, density=0.02):
     adj_adjacency = None
     while True:
         dense_raw = torch.rand(
-            size=[n_dst, n_src]
+            size=[n_rows, n_cols]
         )
         adj_adjacency = torch.where(
             dense_raw < density, 1.0, 0.0
         )
         if adj_adjacency.max() != 0.0:
             break
+    return adj_adjacency
+
+
+def check_gspmm():
+    n_src = random.randint(1, 512)
+    n_dst = random.randint(1, 512)
+    n_heads = random.randint(1, 32)
+    n_features = random.randint(1, 256)
+
+    #
+    adj_adjacency = rand_adjacency(
+        n_rows=n_dst, n_cols=n_src
+    )
     indptr, indices = convert.to_csr(
         adj_adjacency
     )[0]
@@ -85,26 +91,19 @@ def check_gspmm():
     assert torch.allclose(
         grad_2, grad_4, atol=1e-3
     )
+    print('[PASS] check_gspmm')
 
 
 def check_gsddmm():
-    density = 0.02
     n_src = random.randint(1, 512)
     n_dst = random.randint(1, 512)
     n_heads = random.randint(1, 16)
     n_features = random.randint(1, 256)
 
     #
-    adj_adjacency = None
-    while True:
-        dense_raw = torch.rand(
-            size=[n_dst, n_src]
-        )
-        adj_adjacency = torch.where(
-            dense_raw < density, 1.0, 0.0
-        )
-        if adj_adjacency.max() != 0.0:
-            break
+    adj_adjacency = rand_adjacency(
+        n_rows=n_dst, n_cols=n_src
+    )
     indptr, indices = convert.to_csr(
         adj_adjacency
     )[0]
@@ -139,7 +138,7 @@ def check_gsddmm():
     coeff_e = nn.LeakyReLU(
         negative_slope=0.2
     )(coeff_e)
-    negative = -1e15 * torch.ones_like(coeff_e)
+    negative = -1e38 * torch.ones_like(coeff_e)
     coeff_e = torch.where(
         adj_adjacency.unsqueeze(-1) > 0.0,
         coeff_e, negative
@@ -182,9 +181,10 @@ def check_gsddmm():
     assert torch.allclose(
         grad_k_1, grad_k_2, atol=1e-3
     )
+    print('[PASS] check_gsddmm')
 
 
-def check_gemm():
+def check_bundle():
     n_nodes = random.randint(8, 1024)
     n_features = random.randint(8, 256)
     x = torch.randn(
@@ -230,13 +230,14 @@ def check_gemm():
     assert torch.allclose(grad_fc_1, grad_fc_3, atol=1e-3)
     assert torch.allclose(grad_fc_2, grad_fc_4, atol=1e-3)
     assert torch.allclose(grad_x_1, grad_x_2, atol=1e-3)
+    print('[PASS] check_bundle')
 
 
 def check_stitch():
     n_dst = random.randint(1, 64)
-    n_heads = random.randint(1, 8)
+    n_heads = random.randint(1, 4)
     n_stitches = random.randint(2, 8)
-    n_features = random.randint(1, 256)
+    n_features = random.randint(1, 64)
 
     #
     src_list = []
@@ -355,14 +356,90 @@ def check_stitch():
     assert torch.allclose(grad_q_1, grad_q_2, atol=1e-3)
     assert torch.allclose(grad_k_1, grad_k_2, atol=1e-3)
     assert torch.allclose(grad_v_1, grad_v_2, atol=1e-3)
+    print('[PASS] check_stitch')
+
+
+def check_hfuse():
+    """
+    n_src = random.randint(1, 512)
+    n_dst = random.randint(1, 512)
+    n_heads = random.randint(1, 8)
+    n_features = random.randint(1, 64)
+    """
+    n_dst = 4096
+    n_src = 2048
+    n_heads = 8
+    n_features = 4
+
+    #
+    spmm_adjacency = rand_adjacency(
+        n_rows=n_dst, n_cols=n_src, density=0.02
+    )
+    spmm_indptr, spmm_indices = convert.to_csr(
+        dense=spmm_adjacency
+    )[0]
+    spmm_values = torch.randn(
+        [spmm_indices.size(0), n_heads]
+    ).to('cuda')
+    sddmm_adjacency = rand_adjacency(
+        n_rows=n_dst, n_cols=n_src
+    )
+    sddmm_indptr, sddmm_indices = convert.to_csr(
+        dense=sddmm_adjacency
+    )[0]
+
+    #
+    x_dst = torch.randn(
+        [n_dst, n_heads, n_features]
+    ).to('cuda')
+    x_src = torch.randn(
+        [n_src, n_heads, n_features]
+    ).to('cuda')
+    linear_q = nn.Linear(
+        n_features, 1
+    ).to('cuda')
+    linear_k = nn.Linear(
+        n_features, 1
+    ).to('cuda')
+    spmm_blk = block.Block(
+        size=[n_dst, n_src],
+        adj=[spmm_indptr, spmm_indices]
+    ).to('cuda')
+    sddmm_blk = block.Block(
+        size=[n_dst, n_src],
+        adj=[sddmm_indptr, sddmm_indices]
+    ).to('cuda')
+
+    #
+    q = torch.squeeze(
+        linear_q(x_dst), dim=-1
+    )
+    k = torch.squeeze(
+        linear_k(x_src), dim=-1
+    )
+    y_1 = sparse.gspmm(
+        spmm_blk, spmm_values, x_src
+    )
+    y_2 = sparse.fused_gsddmm(
+        sddmm_blk, q, k
+    )
+    y_3, y_4 = sparse.hfused_spddmm(
+        spmm_blk, spmm_values,
+        x_src, sddmm_blk, q, k
+    )
+
+    #
+    assert torch.allclose(y_1, y_3, atol=1e-3)
+    assert torch.allclose(y_2, y_4, atol=1e-3)
 
 
 def test():
     for _ in tqdm(range(16)):
         check_gspmm()
         check_gsddmm()
-        check_gemm()
+        check_bundle()
         check_stitch()
+        check_hfuse()
 
 
 if __name__ == "__main__":

@@ -4,8 +4,8 @@ import torch
 class Tracer(torch.Tensor):
     trace_begin = False
     previous_func = None
-    previous_args = None
-    previous_kwargs = None
+    previous_args = []
+    previous_kwargs = {}
 
     @staticmethod
     def __new__(cls, *args, **kwargs):
@@ -17,8 +17,10 @@ class Tracer(torch.Tensor):
 
     def _set_previous(self, func_name, args, kwargs):
         self.previous_func = func_name
-        self.previous_args = args
-        self.previous_kwargs = kwargs
+        if args is not None:
+            self.previous_args = args
+        if kwargs is not None:
+            self.previous_kwargs = kwargs
 
     @classmethod
     def __torch_function__(cls, func, types, args, kwargs=None):

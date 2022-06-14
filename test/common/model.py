@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from sageir import mp
+from hgl import mp
 from typing import Union
 
 

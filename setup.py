@@ -37,6 +37,7 @@ setup(
                 'src/fc_cuda.cu',
                 'src/spmm_cuda.cu',
                 'src/sddmm_cuda.cu',
+                'src/hfused_cuda.cu',
             ]
         )
     ],

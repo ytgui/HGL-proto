@@ -1,8 +1,8 @@
 import torch
-import sageir
-from sageir import mp
+import hgl
+from hgl import mp
 from torch import nn, optim
-from dgl.data.rdf import AIFBDataset, MUTAGDataset
+from dgl.data.rdf import MUTAGDataset
 from common.model import RGATModel
 from tqdm import tqdm
 
@@ -56,31 +56,31 @@ def check_hetero():
 
     #
     print('===== mod2ir =====')
-    mod2ir = sageir.Module2IR()
+    mod2ir = hgl.Module2IR()
     dataflow = mod2ir.transform(
         model, kwargs=kwargs
     )[pred_cat]
-    sageir.Printer().dump(dataflow)
+    hgl.Printer().dump(dataflow)
 
     #
     print('===== lower =====')
-    optimizer = sageir.Optimizer()
+    optimizer = hgl.Optimizer()
     dataflow = optimizer.lower(
         dataflow, kwargs=kwargs
     )
-    sageir.Printer().dump(dataflow)
+    hgl.Printer().dump(dataflow)
 
     #
     print('===== stitch =====')
-    stitcher = sageir.Stitcher()
+    stitcher = hgl.Stitcher()
     dataflow = stitcher.transform(
         dataflow, kwargs=kwargs
     )
-    sageir.Printer().dump(dataflow)
+    hgl.Printer().dump(dataflow)
 
     #
     print('===== executor =====')
-    executor = sageir.Executor()
+    executor = hgl.Executor()
     loss_fn = nn.CrossEntropyLoss()
     optimizer = optim.Adam(
         model.parameters(),

@@ -1,5 +1,5 @@
 import torch
-from sageir import mp, ir, block
+from hgl import mp, ir, block
 from tqdm import tqdm
 
 

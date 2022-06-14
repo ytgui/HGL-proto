@@ -1,7 +1,7 @@
 import torch
-import sageir
+import hgl
 from torch import overrides
-from sageir import block
+from hgl import block
 
 
 def message_wrapper(graph, func, **kwargs):

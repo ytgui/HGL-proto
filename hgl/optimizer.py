@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from sageir import mp, ir, trace
+from hgl import mp, ir, trace
 
 
 class Optimizer:

@@ -1,9 +1,9 @@
 import time
 import torch
-import sageir
+import hgl
 import argparse
 import dgl as dgl
-from sageir import mp, utils
+from hgl import mp, utils
 from dgl.data import rdf, reddit
 from dgl.data import citation_graph as cit
 from dgl.data import gnn_benchmark as bench
@@ -357,15 +357,15 @@ class BenchMethods:
             kwargs['norm'] = graph.right_norm()
 
         # optimizer
-        mod2ir = sageir.Module2IR()
-        optimizer = sageir.Optimizer()
+        mod2ir = hgl.Module2IR()
+        optimizer = hgl.Optimizer()
         dataflow = mod2ir.transform(
             model, kwargs=kwargs
         )
         dataflow = optimizer.lower(
             dataflow, kwargs=kwargs
         )
-        executor = sageir.Executor()
+        executor = hgl.Executor()
 
         # prewarm
         executor.train()
@@ -449,9 +449,9 @@ class BenchMethods:
             }
 
         # optimizer
-        mod2ir = sageir.Module2IR()
-        optimizer = sageir.Optimizer()
-        stitcher = sageir.Stitcher()
+        mod2ir = hgl.Module2IR()
+        optimizer = hgl.Optimizer()
+        stitcher = hgl.Stitcher()
         dataflow = mod2ir.transform(
             model, kwargs=kwargs
         )[category]
@@ -461,7 +461,7 @@ class BenchMethods:
         dataflow = stitcher.transform(
             dataflow, kwargs=kwargs
         )
-        executor = sageir.Executor()
+        executor = hgl.Executor()
 
         # prewarm
         executor.train()

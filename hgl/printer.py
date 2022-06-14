@@ -1,4 +1,4 @@
-from sageir import ir
+from hgl import ir
 
 
 class Printer:

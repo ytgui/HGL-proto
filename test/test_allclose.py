@@ -1,7 +1,7 @@
 import torch
-import sageir
+import hgl
 from torch import nn
-from sageir import mp
+from hgl import mp
 from dgl import nn as dglnn
 from dgl.data import CoraGraphDataset
 from common.model import GCNLayer
@@ -40,9 +40,9 @@ def check_gcn():
         dglmodel.weight.copy_(w.T)
 
     # result
-    mod2ir = sageir.Module2IR()
-    optimizer = sageir.Optimizer()
-    executor = sageir.Executor()
+    mod2ir = hgl.Module2IR()
+    optimizer = hgl.Optimizer()
+    executor = hgl.Executor()
     dataflow = mod2ir.transform(
         model, kwargs=kwargs
     )

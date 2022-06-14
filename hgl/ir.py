@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from sageir import block
+from hgl import block
 from typing import List, Dict, Union
 
 

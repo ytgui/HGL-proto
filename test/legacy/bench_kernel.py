@@ -1,7 +1,7 @@
 import time
 import torch
 from torch import nn
-from sageir import mp, sparse, bundle, convert, block
+from hgl import mp, sparse, bundle, convert, block
 from dgl.data import CoraGraphDataset, CoraFullDataset, AmazonCoBuyPhotoDataset
 
 
@@ -109,8 +109,34 @@ def bench_bundle():
     ))
 
 
+def bench_hfused():
+    density = 0.001
+    n_src = 512
+    n_dst = 512
+    n_heads = 8
+    n_features = 16
+
+    #
+    adj_adjacency = None
+    while True:
+        dense_raw = torch.rand(
+            size=[n_dst, n_src]
+        )
+        adj_adjacency = torch.where(
+            dense_raw < density, 1.0, 0.0
+        )
+        if adj_adjacency.max() != 0.0:
+            break
+    indptr, indices = convert.to_csr(
+        adj_adjacency
+    )[0]
+
+    #
+    a = 0
+
+
 def main():
-    bench_gspmm()
+    bench_hfused()
 
 
 if __name__ == "__main__":

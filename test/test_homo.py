@@ -1,6 +1,6 @@
 import torch
-import sageir
-from sageir import mp
+import hgl
+from hgl import mp
 from torch import nn, optim
 from dgl.data import CoraGraphDataset
 from common.model import GATModel
@@ -44,23 +44,23 @@ def check_homo():
 
     #
     print('===== mod2ir =====')
-    mod2ir = sageir.Module2IR()
+    mod2ir = hgl.Module2IR()
     dataflow = mod2ir.transform(
         model, kwargs=kwargs
     )
-    sageir.Printer().dump(dataflow)
+    hgl.Printer().dump(dataflow)
 
     #
     print('===== optimizer =====')
-    optimizer = sageir.Optimizer()
+    optimizer = hgl.Optimizer()
     dataflow = optimizer.lower(
         dataflow, kwargs=kwargs
     )
-    sageir.Printer().dump(dataflow)
+    hgl.Printer().dump(dataflow)
 
     #
     print('===== executor =====')
-    executor = sageir.Executor()
+    executor = hgl.Executor()
     loss_fn = nn.CrossEntropyLoss()
     optimizer = optim.Adam(
         model.parameters(),

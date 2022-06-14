@@ -1,7 +1,7 @@
 import torch
-import sageir
+import hgl
 from torch import nn
-from sageir import mp, ir, trace
+from hgl import mp, ir, trace
 
 
 class Module2IR:

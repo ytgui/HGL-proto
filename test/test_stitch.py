@@ -1,6 +1,6 @@
 import torch
-import sageir
-from sageir import mp
+import hgl
+from hgl import mp
 from dgl.data.rdf import AIFBDataset
 from common.model import RGCNModel, RGATModel
 
@@ -42,31 +42,31 @@ def check_stitch_gcn():
 
     #
     print('===== mod2ir =====')
-    mod2ir = sageir.Module2IR()
+    mod2ir = hgl.Module2IR()
     dataflow = mod2ir.transform(
         model, kwargs=kwargs
     )[pred_cat]
-    sageir.Printer().dump(dataflow)
+    hgl.Printer().dump(dataflow)
 
     #
     print('===== lower =====')
-    optimizer = sageir.Optimizer()
+    optimizer = hgl.Optimizer()
     dataflow_1 = optimizer.lower(
         dataflow, kwargs=kwargs
     )
-    sageir.Printer().dump(dataflow)
+    hgl.Printer().dump(dataflow)
 
     #
     print('===== stitch =====')
-    stitcher = sageir.Stitcher()
+    stitcher = hgl.Stitcher()
     dataflow_2 = stitcher.transform(
         dataflow_1, kwargs=kwargs
     )
-    sageir.Printer().dump(dataflow)
+    hgl.Printer().dump(dataflow)
 
     #
     print('===== executor =====')
-    executor = sageir.Executor()
+    executor = hgl.Executor()
     executor.eval()
     y_1 = executor.run(
         dataflow_1,
@@ -114,31 +114,31 @@ def check_stitch_gat():
 
     #
     print('===== mod2ir =====')
-    mod2ir = sageir.Module2IR()
+    mod2ir = hgl.Module2IR()
     dataflow = mod2ir.transform(
         model, kwargs=kwargs
     )[pred_cat]
-    sageir.Printer().dump(dataflow)
+    hgl.Printer().dump(dataflow)
 
     #
     print('===== lower =====')
-    optimizer = sageir.Optimizer()
+    optimizer = hgl.Optimizer()
     dataflow_1 = optimizer.lower(
         dataflow, kwargs=kwargs
     )
-    sageir.Printer().dump(dataflow)
+    hgl.Printer().dump(dataflow)
 
     #
     print('===== stitch =====')
-    stitcher = sageir.Stitcher()
+    stitcher = hgl.Stitcher()
     dataflow_2 = stitcher.transform(
         dataflow_1, kwargs=kwargs
     )
-    sageir.Printer().dump(dataflow)
+    hgl.Printer().dump(dataflow)
 
     #
     print('===== executor =====')
-    executor = sageir.Executor()
+    executor = hgl.Executor()
     executor.eval()
     y_1 = executor.run(
         dataflow_1,

@@ -1,6 +1,6 @@
 import torch
 from torch.nn import functional
-from sageir import mp, ir, sparse
+from hgl import mp, ir, sparse
 
 
 class Executor:
