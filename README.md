@@ -40,9 +40,12 @@ git clone https://github.com/ytgui/HGL-proto.git && cd HGL-proto
 python3 setup.py install
 ```
 
+### 6. Cleanup
++ Delete the `hgl-env` from conda.
++ After evaluation, downloaded datasets are saved at `$HOME/.dgl/` 
 
 ## Evaluation
-> Although this prototype implementation performs excellent performance as the paper illustrated, it is not sufficient for production usage. Please considering re-implement HGL on top of TVM/MLIR/torch.jit/torch.fx (a better implementation for production is comming soon).
+> Although this prototype implementation performs excellent performance as the paper illustrated, it is not sufficient for production usage. Please consider to re-implement HGL on top of TVM/MLIR/torch.jit/torch.fx (a better official implementation for production is comming soon).
 
 ### 1. Folder Structure
 + `setup.py`: After your `install` command, it installs a python package named `graph_ext` in your enviroment, which includes all the necessary (Het)GNN kernels. So that pure python implemented `HGL-proto` can be decoupled from C/C++/CUDA codes.
@@ -58,7 +61,7 @@ torch.backends.cuda.matmul.allow_tf32 = False
 ```
 
 ### 3. Correctness of HGL-proto
-> Both forward results and backward gradients are checked.
+> Both forward results and backward gradients are checked carefully.
 + First, check CUDA kernel results multiple times, sparse matrix computations are compared with dense matrix GEMMs, absolute tolerance is set to 1e-3.
 ```bash
 PYTHONPATH=. python3 test/test_kernel.py
@@ -77,3 +80,9 @@ PYTHONPATH=. python3 test/test_homo.py
 ```
 PYTHONPATH=. python3 test/test_hetero.py
 ```
+
++ Fifth, stitching, the most complex feature of HGL, is ensured to be correct by comparing model outputs when it is enabled and disabled.
+```
+PYTHONPATH=. python3 test/test_stitch.py
+```
+
