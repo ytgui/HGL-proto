@@ -60,7 +60,7 @@ torch.backends.cudnn.allow_tf32 = False
 torch.backends.cuda.matmul.allow_tf32 = False
 ```
 
-+ Sampling based methods generate variable sizes of graphs as input, and make it hard to give stable and consistent reproduction. So, the `bench_macro.py` script uses a fixed sampling setting as follows, where number of nodes is shrinked to 1/16 of its original size in a large graph. (even with this setting, training R-GAT on `am_hetero` dataset may cause OOM if your GPU memory is less than 8GB)
++ Sampling based methods generate variable sizes of graphs as input, and make it hard to give stable and consistent reproduction. So, the `bench_macro.py` script uses a fixed sampling setting as follows, where nodes in a larger graph are shrinked to 1/16 of its original size. (even with this setting, training R-GAT on `am_hetero` dataset may cause OOM if your GPU memory is less than 8GB)
 ```python
 if graph.num_edges() > 128 * 1024:
     n_nodes = graph.num_nodes()
