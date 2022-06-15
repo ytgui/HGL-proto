@@ -642,8 +642,7 @@ def main():
     parser.add_argument('--model', type=str)
     parser.add_argument('--dataset', type=str)
     parser.add_argument('--d_hidden', type=int)
-    # args = parser.parse_args()
-    args = parser.parse_args(['--info'])
+    args = parser.parse_args()
 
     #
     benchmark = Benchmark()
