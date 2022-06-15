@@ -16,6 +16,7 @@ try:
     from common.pygmodel import PyGGCNModel, PyGGATModel, PyGRGCNModel, PyGRGATModel
 except ImportError as e:
     print('PyG not imported')
+    PyGGCNModel = PyGGATModel = PyGRGCNModel = PyGRGATModel = None
 
 torch.backends.cudnn.allow_tf32 = False
 torch.backends.cuda.matmul.allow_tf32 = False

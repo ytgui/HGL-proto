@@ -73,12 +73,12 @@ PYTHONPATH=. python3 test/test_kernel.py
 PYTHONPATH=. python3 test/test_allclose.py
 ```
 
-+ Third, minimal homogeneous training example, the case make sure the convergence of GAT model.
++ Third, minimal homogeneous training example, the case makes sure the convergence of GAT model.
 ```bash
 PYTHONPATH=. python3 test/test_homo.py
 ```
 
-+ Fourth, minimal heterogeneous training example, the case make sure the convergence of R-GAT model.
++ Fourth, minimal heterogeneous training example, the case makes sure the convergence of R-GAT model.
 ```bash
 PYTHONPATH=. python3 test/test_hetero.py
 ```
