@@ -60,6 +60,16 @@ torch.backends.cudnn.allow_tf32 = False
 torch.backends.cuda.matmul.allow_tf32 = False
 ```
 
++ Sampling based methods generate variable sizes of graphs as input, and make it hard to give stable and consistent reproduction. So, the `bench_macro.py` script uses a fixed sampling setting as follows, where number of nodes is shrinked to 1/16 of its original size in a large graph. (even with this setting, training R-GAT on `am_hetero` dataset may cause OOM if your GPU memory is less than 8GB)
+```python
+if graph.num_edges() > 128 * 1024:
+    n_nodes = graph.num_nodes()
+    nids = torch.randperm(n_nodes // 16)
+    graph = dgl.sampling.sample_neighbors(
+        g=graph, nodes=nids, fanout=64
+    )
+```
+
 ### 3. Correctness of HGL-proto
 > Both forward results and backward gradients are checked carefully.
 
@@ -114,5 +124,27 @@ avg_degrees: 0.5861625145724975
 ...
 ```
 
-
-+ Second, performance comparison with baseline in terms of throughput and memory consumption
++ Second, performance comparison with baseline in terms of throughput and memory consumption.
+```bash
+PYTHONPATH=. python3 test/bench_macro.py --lib=dgl --model=rgcn --dataset=aifb_hetero --d_hidden=32
+PYTHONPATH=. python3 test/bench_macro.py --lib=hgl --model=rgcn --dataset=aifb_hetero --d_hidden=32
+```
++ Expected output:
+```bash
+[DGL] aifb-hetero, DGLRGCNModel, d_hidden=32
+allocated_bytes.all.allocated: 384.49 MB
+allocated_bytes.small_pool.allocated: 330.37 MB
+allocated_bytes.large_pool.allocated: 54.12 MB
+throughput: 1.0x
+...
+[HGL] AIFBDataset, RGCNModel, d_hidden=32
+allocated_bytes.all.allocated: 58.97 MB
+allocated_bytes.small_pool.allocated: 45.17 MB
+allocated_bytes.large_pool.allocated: 13.80 MB
+throughput: 20.0x
+```
++ Benchmark Parameters:
+  + --lib: `'dgl', 'hgl', 'pyg'`
+  + --model: `'gcn', 'gat', 'rgcn', 'rgat'`
+  + --dataset: `'cora_tiny', 'amazon', 'cora_full', 'reddit'` (for `'gcn', 'gat'`), `'aifb_hetero', 'mutag_hetero', 'bgs_hetero', 'am_hetero'` (for `'rgcn', 'rgat'`)
+  + --d_hidden: `32` is the recommanded hidden size

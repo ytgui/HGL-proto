@@ -310,9 +310,9 @@ class BenchMethods:
         print('throughput: {:.1f}'.format(n_edges / timing))
 
     @staticmethod
-    def _bench_sageir_homo(dataset, model, d_hidden):
+    def _bench_hgl_homo(dataset, model, d_hidden):
         # info
-        print('[SAGEIR] {}, {}, d_hidden={}'.format(
+        print('[HGL] {}, {}, d_hidden={}'.format(
             type(dataset).__name__,
             model.__name__, d_hidden
         ))
@@ -391,9 +391,9 @@ class BenchMethods:
         print('throughput: {:.1f}'.format(n_edges / timing))
 
     @staticmethod
-    def _bench_sageir_hetero(dataset, model, d_hidden):
+    def _bench_hgl_hetero(dataset, model, d_hidden):
         # info
-        print('[SAGEIR] {}, {}, d_hidden={}'.format(
+        print('[HGL] {}, {}, d_hidden={}'.format(
             type(dataset).__name__,
             model.__name__, d_hidden
         ))
@@ -578,7 +578,7 @@ class Benchmark(BenchMethods):
                 model = GATModel
             else:
                 raise RuntimeError
-            self._bench_sageir_homo(
+            self._bench_hgl_homo(
                 dataset=dataset,
                 model=model,
                 d_hidden=d_hidden
@@ -627,7 +627,7 @@ class Benchmark(BenchMethods):
                 model = RGATModel
             else:
                 raise RuntimeError
-            self._bench_sageir_hetero(
+            self._bench_hgl_hetero(
                 dataset=dataset,
                 model=model,
                 d_hidden=d_hidden
