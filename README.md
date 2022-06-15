@@ -42,7 +42,7 @@ python3 setup.py install
 
 ### 6. Cleanup
 + Delete the `hgl-env` from conda.
-+ After evaluation, downloaded datasets are saved at `$HOME/.dgl/` 
++ After evaluation, downloaded datasets are saved at `$HOME/.dgl/`, you can remove this folder if it is not needed further. 
 
 ## Evaluation
 > Although this prototype implementation performs excellent performance as the paper illustrated, it is not sufficient for production usage. Please consider to re-implement HGL on top of TVM/MLIR/torch.jit/torch.fx (a better official implementation with production stability is comming soon).
@@ -62,26 +62,57 @@ torch.backends.cuda.matmul.allow_tf32 = False
 
 ### 3. Correctness of HGL-proto
 > Both forward results and backward gradients are checked carefully.
+
 + First, check CUDA kernel results multiple times, where sparse matrix computations are compared with dense matrix GEMMs, absolute tolerance is set to 1e-3.
 ```bash
 PYTHONPATH=. python3 test/test_kernel.py
 ```
+
 + Second, check correctness of GNN layer, it makes sure HGL doesn't miss important computation or give wrong result.
-```
+```bash
 PYTHONPATH=. python3 test/test_allclose.py
 ```
 
 + Third, minimal homogeneous training example, the case make sure the convergence of GAT model.
-```
+```bash
 PYTHONPATH=. python3 test/test_homo.py
 ```
 
 + Fourth, minimal heterogeneous training example, the case make sure the convergence of R-GAT model.
-```
+```bash
 PYTHONPATH=. python3 test/test_hetero.py
 ```
 
 + Fifth, stitching, the most complex feature of HGL, is ensured to be correct by comparing model outputs when it is enabled and disabled.
-```
+```bash
 PYTHONPATH=. python3 test/test_stitch.py
 ```
+
+### 4. Result Reproduction
+> Some minor experiments may be removed temporarily during major revision phase.
+
++ First, download and list all the datasets
+```bash
+PYTHONPATH=. python3 test/bench_macro.py --info
+```
++ Expected output:
+```bash
+----------[aifb-hetero]----------
+n_nodes: 7262
+node-types: 7
+meta-paths: 104
+n_rows: 216138
+n_edges: 48810
+avg_degrees: 4.030543059612123
+----------[mutag-hetero]----------
+n_nodes: 27163
+node-types: 5
+meta-paths: 50
+n_rows: 281757
+n_edges: 148100
+avg_degrees: 0.5861625145724975
+...
+```
+
+
++ Second, performance comparison with baseline in terms of throughput and memory consumption
