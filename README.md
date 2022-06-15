@@ -24,7 +24,7 @@ conda install pytest -c conda-forge
 pip3 install rdflib
 ```
 
-+ [Not required] You can also install `pyg=2.0.1` at the same time, however, this may cause conflicts on certain anaconda versions.
++ [Not required] You can also install `pyg=2.0.1` at the same time, however, this may cause conflicts on certain anaconda, gcc, and CUDA versions.
 ```bash
 conda install pyg=2.0.1 dgl-cuda11.3=0.7.2 -c pyg -c dglteam -c conda-forge
 ```
@@ -45,7 +45,7 @@ python3 setup.py install
 + After evaluation, downloaded datasets are saved at `$HOME/.dgl/` 
 
 ## Evaluation
-> Although this prototype implementation performs excellent performance as the paper illustrated, it is not sufficient for production usage. Please consider to re-implement HGL on top of TVM/MLIR/torch.jit/torch.fx (a better official implementation for production is comming soon).
+> Although this prototype implementation performs excellent performance as the paper illustrated, it is not sufficient for production usage. Please consider to re-implement HGL on top of TVM/MLIR/torch.jit/torch.fx (a better official implementation with production stability is comming soon).
 
 ### 1. Folder Structure
 + `setup.py`: After your `install` command, it installs a python package named `graph_ext` in your enviroment, which includes all the necessary (Het)GNN kernels. So that pure python implemented `HGL-proto` can be decoupled from C/C++/CUDA codes.
@@ -62,21 +62,21 @@ torch.backends.cuda.matmul.allow_tf32 = False
 
 ### 3. Correctness of HGL-proto
 > Both forward results and backward gradients are checked carefully.
-+ First, check CUDA kernel results multiple times, sparse matrix computations are compared with dense matrix GEMMs, absolute tolerance is set to 1e-3.
++ First, check CUDA kernel results multiple times, where sparse matrix computations are compared with dense matrix GEMMs, absolute tolerance is set to 1e-3.
 ```bash
 PYTHONPATH=. python3 test/test_kernel.py
 ```
-+ Second, check correctness of GNN layer, make sure HGL doesn't miss important computation or give wrong result.
++ Second, check correctness of GNN layer, it makes sure HGL doesn't miss important computation or give wrong result.
 ```
 PYTHONPATH=. python3 test/test_allclose.py
 ```
 
-+ Third, minimal homogeneous training (GAT) example, make sure the convergence of HGL.
++ Third, minimal homogeneous training example, the case make sure the convergence of GAT model.
 ```
 PYTHONPATH=. python3 test/test_homo.py
 ```
 
-+ Fourth, minimal heterogeneous training (R-GAT) example, make sure the convergence of HGL.
++ Fourth, minimal heterogeneous training example, the case make sure the convergence of R-GAT model.
 ```
 PYTHONPATH=. python3 test/test_hetero.py
 ```
@@ -85,4 +85,3 @@ PYTHONPATH=. python3 test/test_hetero.py
 ```
 PYTHONPATH=. python3 test/test_stitch.py
 ```
-
