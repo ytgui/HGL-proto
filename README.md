@@ -70,7 +70,7 @@ if graph.num_edges() > 128 * 1024:
     )
 ```
 
-+ Please make sure the correct `pytorch=1.10.2` is installed, since it is hard for us to keep maintaining the repo with latest dependencies, and we've found that the dynamic tracing implementation is no longer incompatible with `pytorch>=1.11.x`.
++ Please make sure the correct `pytorch=1.10.2` is installed, since it is hard for us to keep maintaining the prototype implementation works well with the latest dependencies, and we've found that the dynamic tracing implementation is no longer incompatible with `pytorch>=1.11.x` due to calling convention changes.
 
 ### 3. Correctness of HGL-proto
 > Both forward results and backward gradients are checked carefully.
