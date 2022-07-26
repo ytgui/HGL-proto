@@ -5,6 +5,7 @@
 
 ### 1. Installing CUDA
 + Install CUDA 11.x and compatible drivers from https://developer.nvidia.com/cuda-downloads
++ Once the GPU driver is installed correctlly, please verify by running `nvidia-smi` and `nvcc --version`
 
 ### 2. Installing Conda
 + Install Anaconda or Miniconda from https://docs.conda.io
